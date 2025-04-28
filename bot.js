@@ -65,17 +65,7 @@ async function handleMessage(msg) {
   }
 
   if (
-    msg.body.toLowerCase() === "/jogos" ||
-    (msg.body.toLowerCase().includes("onde") &&
-      msg.body.toLowerCase().includes("vai") &&
-      msg.body.toLowerCase().includes("passar")) ||
-    (msg.body.toLowerCase().includes("jogo") &&
-      msg.body.toLowerCase().includes("do") &&
-      msg.body.toLowerCase().includes("assistir")) ||
-    msg.body.toLowerCase().includes("o")
-  ) {
-    session.step = "jogos";
-    session.invalidCount = 0;
+    msg.body.toLowerCase() === "/jogos") {
 
     const resposta = await obterJogosParaWhatsApp();
 
