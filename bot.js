@@ -6,6 +6,8 @@ const iptvstreamplayer = MessageMedia.fromFilePath("./streamplayer.png");
 const ibo = MessageMedia.fromFilePath("./ibo.png");
 const tabelaprecos = MessageMedia.fromFilePath("./tabelaprecos.png");
 
+
+
 const client = new Client({
   authStrategy: new LocalAuth(),
   puppeteer: {
@@ -24,6 +26,7 @@ const client = new Client({
 });
 
 const userSessions = new Map();
+// Eventos do cliente WhatsApp
 client.on("qr", (qr) => {
   qrcode.generate(qr, { small: true });
 });
@@ -36,95 +39,129 @@ client.on("ready", () => {
   console.log("Bot está pronto!");
 });
 
-let modoAusente = false; 
-const avisosEnviados = new Set(); 
+let modoAusente = false; // Variável global para rastrear o estado de "ausente"
+const avisosEnviados = new Set(); // Rastreamento de usuários que já receberam o aviso
 
 async function handleMessage(msg) {
-  if (msg.from.endsWith("@g.us")) return; // Ignora mensagens de grupos
+  if (msg.from.endsWith("@g.us")) return;
 
   const chatId = msg.from;
-
-  // Verifica se o contato está salvo
-  const isSaved = await isContactSaved(chatId);
-
-  // Inicializa a sessão do usuário, se não existir
-  if (!userSessions.has(chatId)) {
-    userSessions.set(chatId, { step: "menu", timestamp: Date.now(), invalidCount: 0 });
-  }
-
-  // Obtém a sessão do usuário
-  const session = userSessions.get(chatId);
-
-  // Respostas avulsas (independente de estar salvo ou não)
   if (
     msg.body.toLowerCase().includes("obrigado") ||
     msg.body.toLowerCase().includes("obrigada") ||
     msg.body.toLowerCase().includes("vlw") ||
-    msg.body.toLowerCase().includes("obg")
+    msg.body.toLowerCase().includes("obg") ||
+    msg.body.toLowerCase().includes("obrigada")
   ) {
     await msg.reply("Disponha 🤝");
     return;
   }
 
-  if (msg.body.toLowerCase() === "/limpar") {
-    userSessions.clear();
-    await msg.reply("Todas as sessões foram limpas com sucesso!");
+  if (
+    msg.body.toLowerCase() === "bom dia") {
+    await msg.reply("Opa, bom dia!");
+    return;
+  }
+  if (
+    msg.body.toLowerCase() === "boa tarde") {
+    await msg.reply("Opa, boa tarde!");
+    return;
+  }
+  if (
+    msg.body.toLowerCase() === "boa noite") {
+    await msg.reply("Opa, boa noite!");
+    return;
+  }
+  // Comando para ativar o modo ausente
+  if (msg.body.toLowerCase() === "/ausente") {
+    modoAusente = true;
+    avisosEnviados.clear(); // Limpa os avisos enviados ao ativar o modo ausente
+    await msg.reply("Modo ausente ativado.");
     return;
   }
 
-  if (msg.body.toLowerCase() === "bom dia") {
-    await msg.reply("Bom dia!");
+  if (msg.body.toLowerCase() === "/comandos") {
+    await msg.reply(
+      "*Listas de comandos do BOT* \n\n" +
+      "/ausente: Ativa o modo ausente\n" +
+      "/ativo: Desativa o modo ausente\n" +
+      "/jogos: Exibe os jogos do dia"
+    );
     return;
   }
 
-  if (msg.body.toLowerCase() === "boa tarde") {
-    await msg.reply("Boa tarde!");
-    return;
-  }
-
-  if (msg.body.toLowerCase() === "boa noite") {
-    await msg.reply("Boa noite!");
-    return;
-  }
-
-  // Envia o menu apenas para contatos não salvos
-  if (!isSaved) {
-    const now = Date.now();
-    console.log("Entrou na linha 93");
-
-    // Verifica se a sessão expirou (12 horas)
-    if (
-      !userSessions.has(chatId) ||
-      now - userSessions.get(chatId).timestamp > 12 * 60 * 60 * 1000
-    )  {
-
-      userSessions.set(chatId, { step: "menu", timestamp: now, invalidCount: 0 });
+  if (msg.body.toLowerCase() === "/jogos") {
+    const resposta = await obterJogosParaWhatsApp();
+    if (typeof resposta === "string" && resposta.length > 0) {
+      await msg.reply(resposta);
+    } else {
       await msg.reply(
-        "Olá! Como posso te ajudar? Responda com o número da opção que deseja:\n\n" +
-          "1️⃣ Conhecer nossos planos de IPTV\n" +
-          "2️⃣ Testar o serviço gratuitamente\n" +
-          "3️⃣ Saber mais sobre como funciona o IPTV\n" +
-          "4️⃣ Já testei e quero ativar\n" +
-          "5️⃣ Falar com um atendente\n\n" +
-          "⚠️ Um humano não verá suas mensagens até que uma opção válida do robô seja escolhida."
+        "⚠️ Nenhum jogo foi encontrado ou houve erro ao obter os dados."
       );
-      return;
     }
-  } else {
-    console.log(`[INFO] Contato ${chatId} está salvo. Menu não será enviado.`);
+    return;
+  }
+
+  // Comando para desativar o modo ausente
+  if (msg.body.toLowerCase() === "/ativo") {
+    modoAusente = false;
+    avisosEnviados.clear(); // Limpa os avisos enviados ao desativar o modo ausente
+    await msg.reply("Modo ausente desativado.");
+    return;
+  }
+
+  if (msg.body.toLowerCase().includes("chave") && msg.body.toLowerCase().includes("envia") || msg.body.toLowerCase().includes("manda") && msg.body.toLowerCase().includes("chave") ) {
+    await msg.reply("Segue abaixo a chave pix do tipo aleatória:");
+    await msg.reply("c366c9e3-fb7c-431f-957e-97287f4f964f");
+    return;
   }
 
   // Verifica se o modo ausente está ativado
   if (modoAusente && !avisosEnviados.has(chatId)) {
+    // Envia o aviso apenas se ainda não foi enviado para este usuário
     await msg.reply(
       "No momento estamos ausentes, então o atendimento humano pode demorar um pouco mais que o normal."
     );
-    avisosEnviados.add(chatId);
+    avisosEnviados.add(chatId); // Marca o usuário como já avisado
+  }
+
+  const now = Date.now();
+
+  if (
+    !userSessions.has(chatId) ||
+    now - userSessions.get(chatId).timestamp > 12 * 60 * 60 * 1000
+  ) {
+    userSessions.set(chatId, { step: "menu", timestamp: now, invalidCount: 0 });
+    await msg.reply(
+      "Olá! Como posso te ajudar? Responda com o número da opção que deseja:\n\n" +
+        "1️⃣ Conhecer nossos planos de IPTV\n" +
+        "2️⃣ Testar o serviço gratuitamente\n" +
+        "3️⃣ Saber mais sobre como funciona o IPTV\n" +
+        "4️⃣ Já testei e quero ativar\n" +
+        "5️⃣ Falar com um atendente\n\n" +
+        "⚠️ Um humano não verá suas mensagens até que uma opção válida do robô seja escolhida."
+    );
+    return;
+  }
+
+  const session = userSessions.get(chatId);
+
+  if (msg.body === "0") {
+    session.step = "menuRecovery";
+    session.invalidCount = 0;
+    await msg.reply(
+      "Bem vindo de volta ao menu\n\n" +
+        "1️⃣ Conhecer nossos planos de IPTV\n" +
+        "2️⃣ Testar o serviço gratuitamente\n" +
+        "3️⃣ Saber mais sobre como funciona o IPTV\n" +
+        "4️⃣ Já testei e quero ativar\n" +
+        "5️⃣ Falar com um atendente"
+    );
+    return;
   }
 
   if (session.invalidCount >= 3) return;
 
-  // Processa as etapas do menu
   if (session.step === "menu" || session.step === "menuRecovery") {
     if (msg.body === "1") {
       session.step = "planos";
@@ -421,9 +458,11 @@ client.on("message", async (msg) => {
   }
 });
 
+// Iniciar o cliente
 client.initialize();
 
+// No FINAL do seu arquivo principal, adicione:
 module.exports = {
   client,
-  handleMessage,
+  handleMessage, // Você precisará criar essa função (veja passo 2)
 };
