@@ -40,18 +40,22 @@ let modoAusente = false;
 const avisosEnviados = new Set(); 
 
 async function handleMessage(msg) {
-  if (msg.from.endsWith("@g.us")) return;
+  if (msg.from.endsWith("@g.us")) return; // Ignora mensagens de grupos
 
   const chatId = msg.from;
 
+  // Verifica se o contato está salvo
   const isSaved = await isContactSaved(chatId);
 
+  // Inicializa a sessão do usuário, se não existir
   if (!userSessions.has(chatId)) {
     userSessions.set(chatId, { step: "menu", timestamp: Date.now(), invalidCount: 0 });
   }
 
+  // Obtém a sessão do usuário
   const session = userSessions.get(chatId);
 
+  // Respostas avulsas (independente de estar salvo ou não)
   if (
     msg.body.toLowerCase().includes("obrigado") ||
     msg.body.toLowerCase().includes("obrigada") ||
@@ -77,9 +81,11 @@ async function handleMessage(msg) {
     return;
   }
 
+  // Envia o menu apenas para contatos não salvos
   if (!isSaved) {
     const now = Date.now();
 
+    // Verifica se a sessão expirou (12 horas)
     if (!session || now - session.timestamp > 12 * 60 * 60 * 1000) {
       userSessions.set(chatId, { step: "menu", timestamp: now, invalidCount: 0 });
       await msg.reply(
@@ -97,6 +103,7 @@ async function handleMessage(msg) {
     console.log(`[INFO] Contato ${chatId} está salvo. Menu não será enviado.`);
   }
 
+  // Verifica se o modo ausente está ativado
   if (modoAusente && !avisosEnviados.has(chatId)) {
     await msg.reply(
       "No momento estamos ausentes, então o atendimento humano pode demorar um pouco mais que o normal."
@@ -106,6 +113,7 @@ async function handleMessage(msg) {
 
   if (session.invalidCount >= 3) return;
 
+  // Processa as etapas do menu
   if (session.step === "menu" || session.step === "menuRecovery") {
     if (msg.body === "1") {
       session.step = "planos";
