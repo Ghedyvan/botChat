@@ -10,7 +10,7 @@ const client = new Client({
   authStrategy: new LocalAuth(),
   puppeteer: {
     headless: true,
-    executablePath: "/usr/bin/chromium-browser",
+    //executablePath: "/usr/bin/chromium-browser",
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
@@ -44,18 +44,32 @@ async function handleMessage(msg) {
   if (msg.from.endsWith("@g.us")) return;
 
   const chatId = msg.from;
-
-  // Verifica se a mensagem contém "obrigado" ou "obrigada"
   if (
     msg.body.toLowerCase().includes("obrigado") ||
     msg.body.toLowerCase().includes("obrigada") ||
     msg.body.toLowerCase().includes("vlw") ||
+    msg.body.toLowerCase().includes("obg") ||
     msg.body.toLowerCase().includes("obrigada")
   ) {
     await msg.reply("Disponha 🤝");
     return;
   }
 
+  if (
+    msg.body.toLowerCase() === "bom dia") {
+    await msg.reply("Opa, bom dia!");
+    return;
+  }
+  if (
+    msg.body.toLowerCase() === "boa tarde") {
+    await msg.reply("Opa, boa tarde!");
+    return;
+  }
+  if (
+    msg.body.toLowerCase() === "boa noite") {
+    await msg.reply("Opa, boa noite!");
+    return;
+  }
   // Comando para ativar o modo ausente
   if (msg.body.toLowerCase() === "/ausente") {
     modoAusente = true;
@@ -64,11 +78,18 @@ async function handleMessage(msg) {
     return;
   }
 
-  if (
-    msg.body.toLowerCase() === "/jogos") {
+  if (msg.body.toLowerCase() === "/comandos") {
+    await msg.reply(
+      "*Listas de comandos do BOT* \n\n" +
+      "/ausente: Ativa o modo ausente\n" +
+      "/ativo: Desativa o modo ausente\n" +
+      "/jogos: Exibe os jogos do dia"
+    );
+    return;
+  }
 
+  if (msg.body.toLowerCase() === "/jogos") {
     const resposta = await obterJogosParaWhatsApp();
-
     if (typeof resposta === "string" && resposta.length > 0) {
       await msg.reply(resposta);
     } else {
@@ -76,6 +97,7 @@ async function handleMessage(msg) {
         "⚠️ Nenhum jogo foi encontrado ou houve erro ao obter os dados."
       );
     }
+    return;
   }
 
   // Comando para desativar o modo ausente
@@ -83,6 +105,12 @@ async function handleMessage(msg) {
     modoAusente = false;
     avisosEnviados.clear(); // Limpa os avisos enviados ao desativar o modo ausente
     await msg.reply("Modo ausente desativado.");
+    return;
+  }
+
+  if (msg.body.toLowerCase().includes("chave") && msg.body.toLowerCase().includes("envia") || msg.body.toLowerCase().includes("manda") && msg.body.toLowerCase().includes("chave") ) {
+    await msg.reply("Segue abaixo a chave pix do tipo aleatória:");
+    await msg.reply("c366c9e3-fb7c-431f-957e-97287f4f964f");
     return;
   }
 
@@ -173,7 +201,7 @@ async function handleMessage(msg) {
       session.step = "humano";
       session.invalidCount = 0;
       await msg.reply(
-        "Digite abaixo o que deseja, a partir de agora um atendente humano irá responder suas mensagens 😊"
+        "Digite abaixo o que deseja, um atendente humano irá responder suas mensagens o mais rápido possível 😊"
       );
     }
   } else if (session.step === "testar") {
@@ -220,7 +248,6 @@ async function handleMessage(msg) {
   } else if (session.step === "celular") {
     if (msg.body === "1") {
       session.step = "android";
-      ß;
       session.invalidCount = 0;
       await client.sendMessage(msg.from, iptvstreamplayer, {
         caption:
@@ -261,16 +288,6 @@ async function handleMessage(msg) {
     } else if (msg.body === "2") {
       session.step = "samsung";
       session.invalidCount = 0;
-      // await msg.reply(
-      //   "✅ Siga os passos abaixo para configurar:\n\n" +
-      //     "▪ Abra a *Loja Samsung* e instale o *SmartUp*\n" +
-      //     "▪ Acesse: Configurações > Geral > Rede > Status > Config. IP\n" +
-      //     "▪ Altere o DNS para *Manual*\n" +
-      //     "▪ Insira: `168.235.81.205` e salve\n" +
-      //     "▪ Reinicie a TV e abra o SmartUp\n\n" +
-      //     "📸 Prontinho! Me envie uma foto da tela que te mando seus dados de acesso.\n\n" +
-      //     "⚠️ *Obs:* Se não encontrar o SmartUp, me avise que te ajudo a baixar outro app."
-      // );
       await msg.reply(
         "✅ Siga os passos abaixo para configurar:\n\n" +
           "1️⃣ *Abra* a loja de aplicativos da sua TV\n" +
@@ -291,15 +308,6 @@ async function handleMessage(msg) {
     } else if (msg.body === "4") {
       session.step = "roku";
       session.invalidCount = 0;
-      // await client.sendMessage(msg.from, ibo, {
-      //   caption:
-      //     "✅ Siga os passos abaixo para configurar:\n\n" +
-      //     "1️⃣ *Abra* a loja de aplicativos da sua TV\n" +
-      //     "2️⃣ *Procure* pelo aplicativo *IBO PRO* e instale\n" +
-      //     "3️⃣ *Abra* o aplicativo e selecione a opção *CHANGE PLAYLIST*\n" +
-      //     "4️⃣ *Me envie* uma foto dos códigos que serão mostrados no lado direito da tela para que eu possa configurar para você\n\n" +
-      //     "⚠️ *Obs:* Todos os apps da TV Roku têm uma tarifa anual de *30 reais* (paga apenas 1x por ano).",
-      // });
       await msg.reply(
         "✅ Siga os passos abaixo para configurar:\n\n" +
           "1️⃣ *Abra* a loja de aplicativos da sua TV\n" +
@@ -373,7 +381,7 @@ async function handleMessage(msg) {
           "_Obs: No cartão tem taxa da operadora de cerca de 1 real_"
       );
     }
-  } else if ((session.step = "cinema")) {
+  } else if (session.step = "cinema") {
     if (msg.body === "1") {
       session.step = "pagamentoCinemaCartao";
       await msg.reply(
@@ -387,7 +395,7 @@ async function handleMessage(msg) {
       );
       await msg.reply("c366c9e3-fb7c-431f-957e-97287f4f964f");
     }
-  } else if ((session.step = "completo")) {
+  } else if (session.step = "completo") {
     if (msg.body === "1") {
       session.step = "pagamentoCompletoCartao";
       await msg.reply(
@@ -401,7 +409,7 @@ async function handleMessage(msg) {
       );
       await msg.reply("c366c9e3-fb7c-431f-957e-97287f4f964f");
     }
-  } else if ((session.step = "duo")) {
+  } else if (session.step = "duo") {
     if (msg.body === "1") {
       session.step = "pagamentoDuoCartao";
       await msg.reply(
