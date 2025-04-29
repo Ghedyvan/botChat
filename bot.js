@@ -90,9 +90,11 @@ async function handleMessage(msg) {
   // Envia o menu apenas para contatos não salvos
   if (!isSaved) {
     const now = Date.now();
+    console.log("Entrou na linha 93");
 
     // Verifica se a sessão expirou (12 horas)
     if (!session || now - session.timestamp > 12 * 60 * 60 * 1000) {
+      console.log("Entrou na linha 97");
       userSessions.set(chatId, { step: "menu", timestamp: now, invalidCount: 0 });
       await msg.reply(
         "Olá! Como posso te ajudar? Responda com o número da opção que deseja:\n\n" +
