@@ -93,49 +93,24 @@ async function handleMessage(msg) {
     console.log("Entrou na linha 93");
 
     // Verifica se a sessão expirou (12 horas)
-  //   if (!session || !session.timestamp || now - session.timestamp > 12 * 60 * 60 * 1000) {
-  //     console.log(`[DEBUG] Criando nova sessão para ${chatId}`);
-  //     console.log(`[DEBUG] session: ${JSON.stringify(session)}`);
-  //     console.log(`[DEBUG] now: ${now}, session.timestamp: ${session ? session.timestamp : "undefined"}`);
-      
-  //     userSessions.set(chatId, { step: "menu", timestamp: now, invalidCount: 0 });
-  //     await msg.reply(
-  //       "Olá! Como posso te ajudar? Responda com o número da opção que deseja:\n\n" +
-  //         "1️⃣ Conhecer nossos planos de IPTV\n" +
-  //         "2️⃣ Testar o serviço gratuitamente\n" +
-  //         "3️⃣ Saber mais sobre como funciona o IPTV\n" +
-  //         "4️⃣ Já testei e quero ativar\n" +
-  //         "5️⃣ Falar com um atendente\n\n" +
-  //         "⚠️ Um humano não verá suas mensagens até que uma opção válida do robô seja escolhida."
-  //     );
-  //     return;
-  //   }
-  // } else {
-  //   console.log(`[INFO] Contato ${chatId} está salvo. Menu não será enviado.`);
-  // }
-
-  if (!session || !session.timestamp || now - session.timestamp > 12 * 60 * 60 * 1000) {
-    console.log(`[DEBUG] Entrou no if da linha 96`);
-    console.log(`[DEBUG] session: ${JSON.stringify(session)}`);
-    console.log(`[DEBUG] now: ${now}`);
-    console.log(`[DEBUG] session.timestamp: ${session ? session.timestamp : "undefined"}`);
-    
-    userSessions.set(chatId, { step: "menu", timestamp: now, invalidCount: 0 });
-    await msg.reply(
-      "Olá! Como posso te ajudar? Responda com o número da opção que deseja:\n\n" +
-        "1️⃣ Conhecer nossos planos de IPTV\n" +
-        "2️⃣ Testar o serviço gratuitamente\n" +
-        "3️⃣ Saber mais sobre como funciona o IPTV\n" +
-        "4️⃣ Já testei e quero ativar\n" +
-        "5️⃣ Falar com um atendente\n\n" +
-        "⚠️ Um humano não verá suas mensagens até que uma opção válida do robô seja escolhida."
-    );
-    return;
-  }} else {
-    console.log(`[DEBUG] Não entrou no if da linha 96`);
-    console.log(`[DEBUG] session: ${JSON.stringify(session)}`);
-    console.log(`[DEBUG] now: ${now}`);
-    console.log(`[DEBUG] session.timestamp: ${session ? session.timestamp : "undefined"}`);
+    if (
+      !userSessions.has(chatId) ||
+      now - userSessions.get(chatId).timestamp > 12 * 60 * 60 * 1000
+    ) {      
+      userSessions.set(chatId, { step: "menu", timestamp: now, invalidCount: 0 });
+      await msg.reply(
+        "Olá! Como posso te ajudar? Responda com o número da opção que deseja:\n\n" +
+          "1️⃣ Conhecer nossos planos de IPTV\n" +
+          "2️⃣ Testar o serviço gratuitamente\n" +
+          "3️⃣ Saber mais sobre como funciona o IPTV\n" +
+          "4️⃣ Já testei e quero ativar\n" +
+          "5️⃣ Falar com um atendente\n\n" +
+          "⚠️ Um humano não verá suas mensagens até que uma opção válida do robô seja escolhida."
+      );
+      return;
+    }
+  } else {
+    console.log(`[INFO] Contato ${chatId} está salvo. Menu não será enviado.`);
   }
 
   // Verifica se o modo ausente está ativado
