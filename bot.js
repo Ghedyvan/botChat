@@ -131,7 +131,7 @@ async function handleMessage(msg) {
         "⚠️ Um humano não verá suas mensagens até que uma opção válida do robô seja escolhida."
     );
     return;
-  } else {
+  }} else {
     console.log(`[DEBUG] Não entrou no if da linha 96`);
     console.log(`[DEBUG] session: ${JSON.stringify(session)}`);
     console.log(`[DEBUG] now: ${now}`);
