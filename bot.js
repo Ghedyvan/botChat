@@ -24,7 +24,6 @@ const client = new Client({
 });
 
 const userSessions = new Map();
-// Eventos do cliente WhatsApp
 client.on("qr", (qr) => {
   qrcode.generate(qr, { small: true });
 });
@@ -46,6 +45,12 @@ async function handleMessage(msg) {
   const chatId = msg.from;
 
   const isSaved = await isContactSaved(chatId);
+
+  if (!userSessions.has(chatId)) {
+    userSessions.set(chatId, { step: "menu", timestamp: Date.now(), invalidCount: 0 });
+  }
+
+  const session = userSessions.get(chatId);
 
   if (
     msg.body.toLowerCase().includes("obrigado") ||
@@ -72,34 +77,31 @@ async function handleMessage(msg) {
     return;
   }
 
-  if (isSaved) {
+  if (!isSaved) {
+    const now = Date.now();
+
+    if (!session || now - session.timestamp > 12 * 60 * 60 * 1000) {
+      userSessions.set(chatId, { step: "menu", timestamp: now, invalidCount: 0 });
+      await msg.reply(
+        "Olá! Como posso te ajudar? Responda com o número da opção que deseja:\n\n" +
+          "1️⃣ Conhecer nossos planos de IPTV\n" +
+          "2️⃣ Testar o serviço gratuitamente\n" +
+          "3️⃣ Saber mais sobre como funciona o IPTV\n" +
+          "4️⃣ Já testei e quero ativar\n" +
+          "5️⃣ Falar com um atendente\n\n" +
+          "⚠️ Um humano não verá suas mensagens até que uma opção válida do robô seja escolhida."
+      );
+      return;
+    }
+  } else {
     console.log(`[INFO] Contato ${chatId} está salvo. Menu não será enviado.`);
-    return;
   }
 
-  const now = Date.now();
-
-  if (
-    !userSessions.has(chatId) ||
-    now - userSessions.get(chatId).timestamp > 12 * 60 * 60 * 1000
-  ) {
-    userSessions.set(chatId, { step: "menu", timestamp: now, invalidCount: 0 });
-    await msg.reply(
-      "Olá! Como posso te ajudar? Responda com o número da opção que deseja:\n\n" +
-        "1️⃣ Conhecer nossos planos de IPTV\n" +
-        "2️⃣ Testar o serviço gratuitamente\n" +
-        "3️⃣ Saber mais sobre como funciona o IPTV\n" +
-        "4️⃣ Já testei e quero ativar\n" +
-        "5️⃣ Falar com um atendente\n\n" +
-        "⚠️ Um humano não verá suas mensagens até que uma opção válida do robô seja escolhida."
-    );
-    return;
-  }
   if (modoAusente && !avisosEnviados.has(chatId)) {
     await msg.reply(
       "No momento estamos ausentes, então o atendimento humano pode demorar um pouco mais que o normal."
     );
-    avisosEnviados.add(chatId); 
+    avisosEnviados.add(chatId);
   }
 
   if (session.invalidCount >= 3) return;
