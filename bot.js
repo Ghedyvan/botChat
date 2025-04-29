@@ -6,6 +6,8 @@ const iptvstreamplayer = MessageMedia.fromFilePath("./streamplayer.png");
 const ibo = MessageMedia.fromFilePath("./ibo.png");
 const tabelaprecos = MessageMedia.fromFilePath("./tabelaprecos.png");
 
+
+
 const client = new Client({
   authStrategy: new LocalAuth(),
   puppeteer: {
@@ -448,23 +450,11 @@ async function isContactSaved(chatId) {
 }
 
 client.on("message", async (msg) => {
-  // Verifica se a mensagem é de um grupo e ignora
-  if (msg.from.endsWith("@g.us")) return;
-
+  console.log(`[MENSAGEM RECEBIDA] De: ${msg.from}`);
   try {
-    // Verifica se o remetente está salvo nos contatos
-    const contatoSalvo = await isContactSaved(msg.from);
-
-    if (contatoSalvo) {
-      console.log(`Mensagem ignorada de número salvo: ${msg.from}`);
-      return; // Ignora mensagens de números salvos
-    }
-
-    // Processa a mensagem normalmente
-    console.log(`Mensagem recebida de número não salvo: ${msg.from}`);
     await handleMessage(msg);
   } catch (error) {
-    console.error("Erro ao processar a mensagem:", error);
+    console.error(`[ERRO] Ao processar mensagem de ${msg.from}:`, error);
   }
 });
 

@@ -1,0 +1,21 @@
+{
+  
+    "123456789@c.us": {
+      "contato": "123456789@c.us",
+      "numero": "+5511999999999",
+      "usuario": "usuario1",
+      "senha": "senha123",
+      "vencimento": "2025-05-01",
+      "nome": "João Silva",
+      "indicacoes": 3
+    },
+    "5582982371442@c.us": {
+      "contato": "5582982371442@c.us",
+      "numero": "+5582982371442",
+      "usuario": "Yj9j4P",
+      "senha": "QUC4Qb",
+      "vencimento": "2025-06-16",
+      "nome": "G Vinicius",
+      "indicacoes": 6
+    }
+}
