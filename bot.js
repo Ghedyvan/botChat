@@ -41,7 +41,7 @@ const avisosEnviados = new Set();
 
 async function handleMessage(msg) {
   if (msg.from.endsWith("@g.us")) return; // Ignora mensagens de grupos
-  console.log(`[DEBUG] Estado inicial da sessão para ${chatId}: ${JSON.stringify(userSessions.get(chatId))}`);
+
   const chatId = msg.from;
 
   // Verifica se o contato está salvo
@@ -96,7 +96,8 @@ async function handleMessage(msg) {
     if (
       !userSessions.has(chatId) ||
       now - userSessions.get(chatId).timestamp > 12 * 60 * 60 * 1000
-    ) {      
+    )  {
+
       userSessions.set(chatId, { step: "menu", timestamp: now, invalidCount: 0 });
       await msg.reply(
         "Olá! Como posso te ajudar? Responda com o número da opção que deseja:\n\n" +
