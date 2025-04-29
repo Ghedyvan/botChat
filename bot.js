@@ -66,6 +66,12 @@ async function handleMessage(msg) {
     return;
   }
 
+  if (msg.body.toLowerCase() === "/limpar") {
+    userSessions.clear();
+    await msg.reply("Todas as sessões foram limpas com sucesso!");
+    return;
+  }
+
   if (msg.body.toLowerCase() === "bom dia") {
     await msg.reply("Bom dia!");
     return;
