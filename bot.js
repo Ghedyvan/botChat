@@ -46,6 +46,10 @@ async function handleMessage(msg) {
   if (msg.from.endsWith("@g.us")) return;
 
   const chatId = msg.from;
+  // Verifica se o contato está salvo e ignora a mensagem se estiver
+  const contatoSalvo = await isContactSaved(chatId);
+  if (contatoSalvo) return;
+  
   if (
     msg.body.toLowerCase().includes("obrigado") ||
     msg.body.toLowerCase().includes("obrigada") ||
@@ -450,6 +454,8 @@ async function isContactSaved(chatId) {
 }
 
 client.on("message", async (msg) => {
+  if (msg.from.endsWith("@g.us")) return;
+
   console.log(`[MENSAGEM RECEBIDA] De: ${msg.from}`);
   try {
     await handleMessage(msg);
