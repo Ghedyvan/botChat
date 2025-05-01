@@ -48,7 +48,6 @@ async function handleMessage(msg) {
   const chatId = msg.from;
   // Verifica se o contato está salvo e ignora a mensagem se estiver
   const contatoSalvo = await isContactSaved(chatId);
-  if (contatoSalvo) return;
   
   if (
     msg.body.toLowerCase().includes("obrigado") ||
@@ -135,6 +134,7 @@ async function handleMessage(msg) {
     !userSessions.has(chatId) ||
     now - userSessions.get(chatId).timestamp > 12 * 60 * 60 * 1000
   ) {
+    if (contatoSalvo) return;
     userSessions.set(chatId, { step: "menu", timestamp: now, invalidCount: 0 });
     await msg.reply(
       "Olá! Como posso te ajudar? Responda com o número da opção que deseja:\n\n" +
