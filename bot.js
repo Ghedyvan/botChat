@@ -5,7 +5,22 @@ const { obterJogosParaWhatsApp } = require("./scrapper.js");
 const iptvstreamplayer = MessageMedia.fromFilePath("./streamplayer.png");
 const ibo = MessageMedia.fromFilePath("./ibo.png");
 const tabelaprecos = MessageMedia.fromFilePath("./tabelaprecos.png");
+const fs = require("fs");
+const indicacoesFile = "./indicacoes.json";
+const adminNumber = "558282371442"; // Substitua pelo seu número
 
+let indicacoes = {};
+
+// Carrega os dados de indicações do arquivo JSON
+if (fs.existsSync(indicacoesFile)) {
+  indicacoes = JSON.parse(fs.readFileSync(indicacoesFile, "utf8"));
+} else {
+  fs.writeFileSync(indicacoesFile, JSON.stringify(indicacoes, null, 2));
+}
+
+function salvarIndicacoes() {
+  fs.writeFileSync(indicacoesFile, JSON.stringify(indicacoes, null, 2));
+}
 
 
 const client = new Client({
@@ -46,7 +61,95 @@ async function handleMessage(msg) {
   if (msg.from.endsWith("@g.us")) return;
 
   const chatId = msg.from;
+
+  // Comando para exibir o número de indicações
+  if (msg.body.toLowerCase() === "/indicacoes") {
+    const chatId = msg.from;
   
+    if (!indicacoes[chatId]) {
+      await msg.reply("📊 Você ainda não possui nenhuma indicação registrada.");
+      return;
+    }
+  
+    const { nome, indicacoes: totalIndicacoes } = indicacoes[chatId];
+    await msg.reply(
+      `📊 ${nome}, você possui ${totalIndicacoes} indicação(ões) registrada(s).`
+    );
+    return;
+  }
+
+  if (msg.body.toLowerCase() === "/indicacoes_todos") {
+    // Verifica se há registros de indicações
+
+    if (msg.from !== adminNumber) {
+      await msg.reply("⚠️ Você não tem permissão para usar este comando.");
+      return;
+    }
+    if (Object.keys(indicacoes).length === 0) {
+      await msg.reply("📊 Nenhuma indicação registrada até o momento.");
+      return;
+    }
+  
+    // Monta a lista de indicações
+    let resposta = "📋 *Lista de Indicações:*\n\n";
+    for (const [numero, dados] of Object.entries(indicacoes)) {
+      resposta += `📞 *${dados.nome || "Contato Desconhecido"}* (${numero}): ${dados.indicacoes} indicação(ões)\n`;
+    }
+  
+    await msg.reply(resposta);
+    return;
+  }
+
+  // Comando para incrementar o número de indicações
+  if (msg.body.toLowerCase() === "/incrementar") {
+    const chatId = msg.from;
+  
+    // Busca o nome do contato
+    const contato = await client.getContactById(chatId);
+    const nomeContato = contato.pushname || contato.name || "Contato Desconhecido";
+  
+    // Inicializa o registro do contato, se não existir
+    if (!indicacoes[chatId]) {
+      indicacoes[chatId] = { nome: nomeContato, indicacoes: 0 };
+    }
+  
+    // Incrementa o número de indicações
+    indicacoes[chatId].indicacoes += 1;
+  
+    salvarIndicacoes(); // Salva os dados no arquivo
+    await msg.reply(
+      `✅ Indicação registrada com sucesso! ${indicacoes[chatId].nome}, você agora possui ${indicacoes[chatId].indicacoes} indicação(ões).`
+    );
+    return;
+  }
+
+  // Comando para ajustar manualmente o número de indicações
+  if (msg.body.toLowerCase().startsWith("/ajustar")) {
+    const [_, quantidade] = msg.body.split(" ");
+    const chatId = msg.from;
+  
+    if (!quantidade || isNaN(quantidade)) {
+      await msg.reply("⚠️ Uso correto: /ajustar <quantidade>");
+      return;
+    }
+  
+    // Busca o nome do contato
+    const contato = await client.getContactById(chatId);
+    const nomeContato = contato.pushname || contato.name || "Contato Desconhecido";
+  
+    // Atualiza ou inicializa o registro do contato
+    indicacoes[chatId] = {
+      nome: nomeContato,
+      indicacoes: parseInt(quantidade, 10),
+    };
+  
+    salvarIndicacoes(); // Salva os dados no arquivo
+    await msg.reply(
+      `✅ O número de indicações foi ajustado para ${indicacoes[chatId].indicacoes} para o contato ${indicacoes[chatId].nome}.`
+    );
+    return;
+  }
+
   const contatoSalvo = await isContactSaved(chatId);
   
   if (
@@ -83,12 +186,38 @@ async function handleMessage(msg) {
     return;
   }
 
+  if (msg.body.toLowerCase() === "/admin") {
+    if (msg.from !== adminNumber) {
+      await msg.reply("⚠️ Você não tem permissão para usar este comando.");
+      return;
+    }
+    await msg.reply(
+      "*Lista de comandos do BOT* \n\n" +
+        "📋 *Comandos gerais:*\n" +
+        "/indicacoes - Exibe o número de indicações do cliente\n" +
+        "/indicacoes_todos - Lista o número de indicações de todos os clientes (somente admin)\n" +
+        "/incrementar - Incrementa manualmente o número de indicações do cliente\n" +
+        "/ajustar <quantidade> - Ajusta manualmente o número de indicações do cliente (somente admin)\n" +
+        "/jogos - Exibe os jogos do dia\n\n" +
+        "📋 *Comandos de status:*\n" +
+        "/ausente - Ativa o modo ausente\n" +
+        "/ativo - Desativa o modo ausente\n\n" +
+        "📋 *Outros comandos:*\n" +
+        "/comandos - Exibe esta lista de comandos\n" +
+        "/admin - Exibe comandos administrativos\n\n" +
+        "⚠️ _Alguns comandos são restritos ao administrador._"
+    );
+    return;
+  }
+
   if (msg.body.toLowerCase() === "/comandos") {
     await msg.reply(
-      "*Listas de comandos do BOT* \n\n" +
-      "/ausente: Ativa o modo ausente\n" +
-      "/ativo: Desativa o modo ausente\n" +
-      "/jogos: Exibe os jogos do dia"
+      "*Lista de comandos do BOT* \n\n" +
+        "📋 *Comandos gerais:*\n" +
+        "/indicacoes - Exibe o número de indicações que você fez\n" +
+        "/jogos - Exibe os jogos do dia\n\n" +
+        "📋 *Outros comandos:*\n" +
+        "/comandos - Exibe esta lista de comandos\n" 
     );
     return;
   }
