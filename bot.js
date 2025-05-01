@@ -87,7 +87,7 @@ async function handleMessage(msg) {
   if (msg.body.toLowerCase() === "/indicacoes_todos") {
     // Verifica se há registros de indicações
 
-    if (msg.from !== adminNumber) {
+    if (msg.from !== `${adminNumber}@c.us`) {
       await msg.reply("⚠️ Você não tem permissão para usar este comando.");
       return;
     }
@@ -202,17 +202,17 @@ async function handleMessage(msg) {
     await msg.reply(
       "*Lista de comandos do BOT* \n\n" +
         "📋 *Comandos gerais:*\n" +
-        "/indicacoes - Exibe o número de indicações do cliente\n" +
-        "/indicacoes_todos - Lista o número de indicações de todos os clientes (somente admin)\n" +
-        "/incrementar - Incrementa manualmente o número de indicações do cliente\n" +
-        "/ajustar <quantidade> - Ajusta manualmente o número de indicações do cliente (somente admin)\n" +
-        "/jogos - Exibe os jogos do dia\n\n" +
+        "*/indicacoes -* Exibe o número de indicações do cliente\n" +
+        "*/indicacoes_todos -* Lista o número de indicações de todos os clientes (somente admin)\n" +
+        "*/incrementar -* Incrementa manualmente o número de indicações do cliente\n" +
+        "*/ajustar <quantidade> -* Ajusta manualmente o número de indicações do cliente (somente admin)\n" +
+        "*/jogos -* Exibe os jogos do dia\n\n" +
         "📋 *Comandos de status:*\n" +
-        "/ausente - Ativa o modo ausente\n" +
-        "/ativo - Desativa o modo ausente\n\n" +
+        "*/ausente -* Ativa o modo ausente\n" +
+        "*/ativo -* Desativa o modo ausente\n\n" +
         "📋 *Outros comandos:*\n" +
-        "/comandos - Exibe esta lista de comandos\n" +
-        "/admin - Exibe comandos administrativos\n\n" +
+        "*/comandos -* Exibe esta lista de comandos\n" +
+        "*/admin -* Exibe comandos administrativos\n\n" +
         "⚠️ _Alguns comandos são restritos ao administrador._"
     );
     return;
@@ -222,10 +222,10 @@ async function handleMessage(msg) {
     await msg.reply(
       "*Lista de comandos do BOT* \n\n" +
         "📋 *Comandos gerais:*\n" +
-        "/indicacoes - Exibe o número de indicações que você fez\n" +
-        "/jogos - Exibe os jogos do dia\n\n" +
+        "*/indicacoes -* Exibe o número de indicações que você fez\n" +
+        "*/jogos -* Exibe os jogos do dia\n\n" +
         "📋 *Outros comandos:*\n" +
-        "/comandos - Exibe esta lista de comandos\n" 
+        "*/comandos -* Exibe esta lista de comandos\n" 
     );
     return;
   }
