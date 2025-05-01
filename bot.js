@@ -13,7 +13,13 @@ let indicacoes = {};
 
 // Carrega os dados de indicações do arquivo JSON
 if (fs.existsSync(indicacoesFile)) {
-  indicacoes = JSON.parse(fs.readFileSync(indicacoesFile, "utf8"));
+  try {
+    const data = fs.readFileSync(indicacoesFile, "utf8");
+    indicacoes = data ? JSON.parse(data) : {};
+  } catch (error) {
+    console.error("Erro ao carregar o arquivo indicacoes.json:", error);
+    indicacoes = {}; // Inicializa como vazio em caso de erro
+  }
 } else {
   fs.writeFileSync(indicacoesFile, JSON.stringify(indicacoes, null, 2));
 }
@@ -568,12 +574,12 @@ async function isContactSaved(chatId) {
 
     if (contact) {
       const isSaved = contact.isMyContact; // Verifica se o contato está salvo
-      console.log(`[VERIFICAÇÃO] O contato ${chatId} está salvo? ${isSaved}`);
+      //console.log(`[VERIFICAÇÃO] O contato ${chatId} está salvo? ${isSaved}`);
       return isSaved;
     }
 
     console.log(
-      `[VERIFICAÇÃO] O contato ${chatId} não foi encontrado na lista de contatos.`
+      //`[VERIFICAÇÃO] O contato ${chatId} não foi encontrado na lista de contatos.`
     );
     return false; // Retorna false se o contato não foi encontrado
   } catch (error) {
