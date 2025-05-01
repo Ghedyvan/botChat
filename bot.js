@@ -193,10 +193,12 @@ async function handleMessage(msg) {
   }
 
   if (msg.body.toLowerCase() === "/admin") {
-    if (msg.from !== adminNumber && msg.from !== "5582982371442") {
+    // Verifica se o remetente é o administrador
+    if (msg.from !== `${adminNumber}@c.us`) {
       await msg.reply("⚠️ Você não tem permissão para usar este comando.");
       return;
     }
+  
     await msg.reply(
       "*Lista de comandos do BOT* \n\n" +
         "📋 *Comandos gerais:*\n" +
