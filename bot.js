@@ -193,7 +193,7 @@ async function handleMessage(msg) {
   }
 
   if (msg.body.toLowerCase() === "/admin") {
-    if (msg.from !== adminNumber) {
+    if (msg.from !== adminNumber || msg.from !== "5582982371442") {
       await msg.reply("⚠️ Você não tem permissão para usar este comando.");
       return;
     }

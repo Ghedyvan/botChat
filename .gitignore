@@ -2,3 +2,6 @@
 /.env
 /.wwebjs_auth
 /.wwebjs_cache
+/indicacoes.json
+./indicacoes.json
+/.indicacoes.json

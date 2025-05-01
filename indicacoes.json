@@ -1,1 +1,10 @@
-{}
+{
+    "5511999999999": {
+      "nome": "João Silva",
+      "indicacoes": 3
+    },
+    "5511888888888": {
+      "nome": "Maria Oliveira",
+      "indicacoes": 5
+    }
+  }
