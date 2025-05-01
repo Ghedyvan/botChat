@@ -39,14 +39,14 @@ client.on("ready", () => {
   console.log("Bot está pronto!");
 });
 
-let modoAusente = false; // Variável global para rastrear o estado de "ausente"
-const avisosEnviados = new Set(); // Rastreamento de usuários que já receberam o aviso
+let modoAusente = false; 
+const avisosEnviados = new Set(); 
 
 async function handleMessage(msg) {
   if (msg.from.endsWith("@g.us")) return;
 
   const chatId = msg.from;
-  // Verifica se o contato está salvo e ignora a mensagem se estiver
+  
   const contatoSalvo = await isContactSaved(chatId);
   
   if (
