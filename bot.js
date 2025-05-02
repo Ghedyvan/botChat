@@ -7,7 +7,18 @@ const ibo = MessageMedia.fromFilePath("./ibo.png");
 const tabelaprecos = MessageMedia.fromFilePath("./tabelaprecos.png");
 const fs = require("fs");
 const indicacoesFile = "./indicacoes.json";
-const adminNumber = "558282371442"; // Substitua pelo seu número
+const adminNumber = "558282371442";
+const logFile = "./bot.log";
+
+function registrarLog(mensagem) {
+  const agora = new Date();
+  const dataHora = `[${agora.toLocaleDateString("pt-BR")} - ${agora
+    .toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+    .replace(":", "-")}]`; 
+  const logMensagem = `${dataHora} ${mensagem}\n`;
+
+  fs.appendFileSync(logFile, logMensagem, "utf8");
+}
 
 let indicacoes = {};
 
@@ -18,7 +29,7 @@ if (fs.existsSync(indicacoesFile)) {
     indicacoes = data ? JSON.parse(data) : {};
   } catch (error) {
     console.error("Erro ao carregar o arquivo indicacoes.json:", error);
-    indicacoes = {}; // Inicializa como vazio em caso de erro
+    indicacoes = {};
   }
 } else {
   fs.writeFileSync(indicacoesFile, JSON.stringify(indicacoes, null, 2));
@@ -53,11 +64,15 @@ client.on("qr", (qr) => {
 });
 
 client.on("authenticated", () => {
-  console.log("Autenticado com sucesso!");
+  const mensagem = "Autenticado com sucesso!";
+  console.log(mensagem);
+  registrarLog(mensagem);
 });
 
 client.on("ready", () => {
-  console.log("Bot está pronto!");
+  const mensagem = "Bot está pronto!";
+  console.log(mensagem);
+  registrarLog(mensagem);
 });
 
 let modoAusente = false; 
@@ -580,9 +595,9 @@ async function isContactSaved(chatId) {
       return isSaved;
     }
 
-    console.log(
-      //`[VERIFICAÇÃO] O contato ${chatId} não foi encontrado na lista de contatos.`
-    );
+    // console.log(
+    //   `[VERIFICAÇÃO] O contato ${chatId} não foi encontrado na lista de contatos.`
+    // );
     return false; // Retorna false se o contato não foi encontrado
   } catch (error) {
     console.error("Erro ao verificar se o contato está salvo:", error);
@@ -593,11 +608,15 @@ async function isContactSaved(chatId) {
 client.on("message", async (msg) => {
   if (msg.from.endsWith("@g.us")) return;
 
-  console.log(`[MENSAGEM RECEBIDA] De: ${msg.from}`);
+  const logMensagem = `[MENSAGEM RECEBIDA] De: ${msg.from}`;
+  console.log(logMensagem);
+  registrarLog(logMensagem);
   try {
     await handleMessage(msg);
   } catch (error) {
-    console.error(`[ERRO] Ao processar mensagem de ${msg.from}:`, error);
+    const erroMensagem = `[ERRO] Ao processar mensagem de ${msg.from}: ${error.message}`;
+    console.error(erroMensagem);
+    registrarLog(erroMensagem);
   }
 });
 
