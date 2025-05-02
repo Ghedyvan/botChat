@@ -171,17 +171,17 @@ async function handleMessage(msg) {
 
   if (
     msg.body.toLowerCase() === "bom dia") {
-    await msg.reply("Opa, bom dia!");
+    await msg.reply("Bom dia!");
     return;
   }
   if (
     msg.body.toLowerCase() === "boa tarde") {
-    await msg.reply("Opa, boa tarde!");
+    await msg.reply("Boa tarde!");
     return;
   }
   if (
     msg.body.toLowerCase() === "boa noite") {
-    await msg.reply("Opa, boa noite!");
+    await msg.reply("Boa noite!");
     return;
   }
   // Comando para ativar o modo ausente
