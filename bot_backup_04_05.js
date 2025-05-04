@@ -83,7 +83,7 @@ async function handleMessage(msg) {
 
   const chatId = msg.from;
 
-  if (msg.body.toLowerCase() === "/pontos") {
+  if (msg.body.toLowerCase() === "/indicacoes") {
     const chatId = msg.from;
   
     if (!indicacoes[chatId]) {

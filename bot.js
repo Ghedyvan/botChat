@@ -5,6 +5,7 @@ const { obterJogosParaWhatsApp } = require("./scrapper.js");
 const iptvstreamplayer = MessageMedia.fromFilePath("./streamplayer.png");
 const ibo = MessageMedia.fromFilePath("./ibo.png");
 const tabelaprecos = MessageMedia.fromFilePath("./tabelaprecos.png");
+const bannerIndicacao = MessageMedia.fromFilePath("./bannerIndicacao.png");
 const fs = require("fs");
 const indicacoesFile = "./indicacoes.json";
 const adminNumber = "558282371442";
@@ -83,7 +84,7 @@ async function handleMessage(msg) {
 
   const chatId = msg.from;
 
-  if (msg.body.toLowerCase() === "/indicacoes") {
+  if (msg.body.toLowerCase() === "/pontos") {
     const chatId = msg.from;
   
     if (!indicacoes[chatId]) {
@@ -92,9 +93,11 @@ async function handleMessage(msg) {
     }
   
     const { nome, indicacoes: totalIndicacoes } = indicacoes[chatId];
-    await msg.reply(
-      `📊 ${nome}, você possui ${totalIndicacoes} indicação(ões) registrada(s).`
-    );
+    const pontos = totalIndicacoes * 10; // Calcula os pontos com base nas indicações
+  
+    await client.sendMessage(chatId, bannerIndicacao, {
+      caption: `📊 ${nome}, você possui ${totalIndicacoes} indicação(ões), o que equivale a ${pontos} ponto(s).`,
+    });
     return;
   }
 
@@ -118,7 +121,7 @@ async function handleMessage(msg) {
     return;
   }
 
-  if (msg.body.toLowerCase() === "/incrementar") {
+  if (msg.body.toLowerCase() === "/indiquei") {
     const chatId = msg.from;
   
     const contato = await client.getContactById(chatId);
@@ -129,12 +132,35 @@ async function handleMessage(msg) {
     }
   
     indicacoes[chatId].indicacoes += 1;
+    const pontos = indicacoes[chatId].indicacoes * 10; 
   
     salvarIndicacoes();
+    fazerBackupIndicacoes();
+
     await msg.reply(
-      `✅ Indicação registrada com sucesso! ${indicacoes[chatId].nome}, você agora possui ${indicacoes[chatId].indicacoes} indicação(ões).`
+      `✅ Indicação registrada com sucesso! ${indicacoes[chatId].nome}, você agora possui ${indicacoes[chatId].indicacoes} indicação(ões), o que equivale a ${pontos} ponto(s).\n\n` +
+      'Se desejar ver a tabela de recompensas, envie a mensagem abaixo para mim:\n\n' +
+      '/recompensas'
     );
     return;
+  }
+
+  function fazerBackupIndicacoes() {
+    const agora = new Date();
+    const dataHora = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-${String(agora.getDate()).padStart(2, "0")}_${String(agora.getHours()).padStart(2, "0")}-${String(agora.getMinutes()).padStart(2, "0")}`;
+    const backupFile = `./backups/indicacoes_backup_${dataHora}.json`;
+  
+    try {
+      if (!fs.existsSync("./backups")) {
+        fs.mkdirSync("./backups");
+      }
+      fs.copyFileSync(indicacoesFile, backupFile);
+      console.log(`Backup criado: ${backupFile}`);
+      registrarLog(`Backup criado: ${backupFile}`);
+    } catch (error) {
+      console.error("Erro ao criar backup:", error);
+      registrarLog(`Erro ao criar backup: ${error.message}`);
+    }
   }
 
   if (msg.body.toLowerCase().startsWith("/ajustar")) {
@@ -189,16 +215,14 @@ async function handleMessage(msg) {
     await msg.reply("Boa noite!");
     return;
   }
-  // Comando para ativar o modo ausente
   if (msg.body.toLowerCase() === "/ausente") {
     modoAusente = true;
-    avisosEnviados.clear(); // Limpa os avisos enviados ao ativar o modo ausente
+    avisosEnviados.clear();
     await msg.reply("Modo ausente ativado.");
     return;
   }
 
   if (msg.body.toLowerCase() === "/admin") {
-    // Verifica se o remetente é o administrador
     if (msg.from !== `${adminNumber}@c.us`) {
       await msg.reply("⚠️ Você não tem permissão para usar este comando.");
       return;
@@ -209,8 +233,8 @@ async function handleMessage(msg) {
         "📋 *Comandos gerais:*\n" +
         "*/indicacoes -* Exibe o número de indicações do cliente\n" +
         "*/indicacoes_todos -* Lista o número de indicações de todos os clientes (somente admin)\n" +
-        "*/incrementar -* Incrementa manualmente o número de indicações do cliente\n" +
-        "*/ajustar <quantidade> -* Ajusta manualmente o número de indicações do cliente (somente admin)\n" +
+        "*/indiquei -* Incrementa manualmente o número de indicações do cliente\n" +
+        "*/ajustar <quantidade> -* Ajusta manualmente o número de indicações do cliente\n" +
         "*/jogos -* Exibe os jogos do dia\n\n" +
         "📋 *Comandos de status:*\n" +
         "*/ausente -* Ativa o modo ausente\n" +
@@ -283,7 +307,7 @@ async function handleMessage(msg) {
         "1️⃣ Conhecer nossos planos de IPTV\n" +
         "2️⃣ Testar o serviço gratuitamente\n" +
         "3️⃣ Saber mais sobre como funciona o IPTV\n" +
-        "4️⃣ Já testei e quero ativar\n" +
+        "4️⃣ Já testei e quero pagar agora\n" +
         "5️⃣ Falar com um atendente\n\n" +
         "⚠️ Um humano não verá suas mensagens até que uma opção válida do robô seja escolhida."
     );
@@ -300,7 +324,7 @@ async function handleMessage(msg) {
         "1️⃣ Conhecer nossos planos de IPTV\n" +
         "2️⃣ Testar o serviço gratuitamente\n" +
         "3️⃣ Saber mais sobre como funciona o IPTV\n" +
-        "4️⃣ Já testei e quero ativar\n" +
+        "4️⃣ Já testei e quero pagar agora\n" +
         "5️⃣ Falar com um atendente"
     );
     return;
@@ -316,7 +340,7 @@ async function handleMessage(msg) {
         caption:
           "📌 Escolha o que deseja fazer agora:\n\n" +
           "1️⃣ Testar o serviço gratuitamente\n" +
-          "2️⃣ Escolhi meu plano, quero ativar agora\n" +
+          "2️⃣ Escolhi meu plano, já fiz o teste e quero pagar agora\n" +
           "3️⃣ Saber mais sobre como funciona o IPTV\n\n" +
           "0️⃣ Menu inicial",
       });
@@ -580,14 +604,9 @@ async function isContactSaved(chatId) {
     const contact = contacts.find((c) => c.id._serialized === chatId);
 
     if (contact) {
-      const isSaved = contact.isMyContact; // Verifica se o contato está salvo
-      //console.log(`[VERIFICAÇÃO] O contato ${chatId} está salvo? ${isSaved}`);
+      const isSaved = contact.isMyContact;
       return isSaved;
     }
-
-    // console.log(
-    //   `[VERIFICAÇÃO] O contato ${chatId} não foi encontrado na lista de contatos.`
-    // );
     return false; 
   } catch (error) {
     console.error("Erro ao verificar se o contato está salvo:", error);
