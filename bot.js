@@ -553,7 +553,7 @@ async function handleMessage(msg) {
           "_Obs: No cartão tem taxa da operadora de cerca de 1 real_"
       );
     }
-  } else if (session.step = "cinema") {
+  } else if (session.step === "cinema") {
     if (msg.body === "1") {
       session.step = "pagamentoCinemaCartao";
       await msg.reply(
@@ -567,7 +567,7 @@ async function handleMessage(msg) {
       );
       await msg.reply("c366c9e3-fb7c-431f-957e-97287f4f964f");
     }
-  } else if (session.step = "completo") {
+  } else if (session.step === "completo") {
     if (msg.body === "1") {
       session.step = "pagamentoCompletoCartao";
       await msg.reply(
@@ -581,7 +581,7 @@ async function handleMessage(msg) {
       );
       await msg.reply("c366c9e3-fb7c-431f-957e-97287f4f964f");
     }
-  } else if (session.step = "duo") {
+  } else if (session.step === "duo") {
     if (msg.body === "1") {
       session.step = "pagamentoDuoCartao";
       await msg.reply(
