@@ -520,7 +520,7 @@ async function handleMessage(msg) {
           "_O plano completo tem acréscimo de 5$ caso seja pago após o vencimento_"
       );
     } else if (msg.body === "3") {
-      session.step = "comoFunciona";
+      session.step = "comoFunciona2";
       session.invalidCount = 0;
       await msg.reply(
         "O IPTV é um serviço de streaming que permite assistir a canais de TV ao vivo, filmes, séries e novelas pela internet. Você pode acessar uma variedade de canais e programas em diferentes dispositivos, como TVs, smartphones e computadores.\n\n" +
