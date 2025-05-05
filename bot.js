@@ -129,14 +129,16 @@ async function handleMessage(msg) {
   
     if (!indicacoes[chatId]) {
       indicacoes[chatId] = { nome: nomeContato, indicacoes: 0 };
+    } else {
+      indicacoes[chatId].nome = nomeContato; 
     }
   
     indicacoes[chatId].indicacoes += 1;
-    const pontos = indicacoes[chatId].indicacoes * 10; 
+    const pontos = indicacoes[chatId].indicacoes * 10;
   
-    salvarIndicacoes();
-    fazerBackupIndicacoes();
-
+    salvarIndicacoes(); 
+    fazerBackupIndicacoes(); 
+  
     await msg.reply(
       `✅ Indicação registrada com sucesso! ${indicacoes[chatId].nome}, você agora possui ${indicacoes[chatId].indicacoes} indicação(ões), o que equivale a ${pontos} ponto(s).\n\n` +
       'Se desejar ver a tabela de recompensas, envie a mensagem abaixo para mim:\n\n' +
