@@ -114,7 +114,8 @@ async function handleMessage(msg) {
   
     let resposta = "📋 *Lista de Indicações:*\n\n";
     for (const [numero, dados] of Object.entries(indicacoes)) {
-      resposta += `📞 *${dados.nome || "Contato Desconhecido"}* (${numero}): ${dados.indicacoes} indicação(ões)\n`;
+      const numeroSemSufixo = numero.replace("@c.us", "");
+      resposta += `📞 *${numeroSemSufixo || "Contato Desconhecido"}* ${dados.nome}: ${dados.indicacoes} indicação(ões)\n`;
     }
   
     await msg.reply(resposta);
