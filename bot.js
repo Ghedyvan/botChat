@@ -13,56 +13,6 @@ const logFile = "./bot.log";
 const PDFDocument = require("pdfkit");
 const axios = require("axios");
 
-if (msg.body.toLowerCase() === "/tst") {
-  try {
-    // Prepara os dados para o POST
-    const postData = {
-      appName: "com.whatsapp",
-      messageDateTime: new Date().toISOString(), // Data e hora atual no formato ISO
-      devicePhone: "", // Número do telefone do remetente
-      deviceName: "", // Nome do dispositivo
-      senderName: msg._data.notifyName || "Nome Desconhecido", // Nome do remetente
-      senderMessage: msg.body, // Mensagem enviada pelo usuário
-      userAgent: "BotBot.Chat", // Identificação do bot
-    };
-
-    // Faz a requisição POST para a API
-    const response = await axios.post(
-      "https://goldplay.sigma.st/api/chatbot/mVLl9vYDQw/rlKWO3Wzo7",
-      postData
-    );
-
-    // Verifica se a resposta contém dados
-    if (response.data) {
-      const tempFilePath = "./temp_response.json"; // Caminho do arquivo temporário
-
-      // Salva os dados retornados no arquivo JSON
-      fs.writeFileSync(tempFilePath, JSON.stringify(response.data, null, 2), "utf8");
-
-      // Extrai os dados "username" e "password" da resposta
-      const { username, password } = response.data;
-
-      // Verifica se os dados existem antes de enviar
-      if (username && password) {
-        await msg.reply(
-          `✅ As informações foram obtidas com sucesso!\n\n` +
-          `🔑 *Username:* ${username}\n` +
-          `🔒 *Password:* ${password}`
-        );
-      } else {
-        await msg.reply("⚠️ A API não retornou os campos 'username' e 'password'.");
-      }
-    } else {
-      await msg.reply("⚠️ A API não retornou dados.");
-    }
-  } catch (error) {
-    console.error("Erro ao fazer a requisição para a API:", error);
-    await msg.reply("⚠️ Ocorreu um erro ao tentar obter as informações.");
-  }
-
-  return;
-}
-
 function limparLogAntigo() {
   const doisDiasAtras = new Date();
   doisDiasAtras.setDate(doisDiasAtras.getDate() - 2); 
@@ -163,6 +113,55 @@ async function handleMessage(msg) {
 
   const chatId = msg.from;
 
+  if (msg.body.toLowerCase() === "/tst") {
+    try {
+      // Prepara os dados para o POST
+      const postData = {
+        appName: "com.whatsapp",
+        messageDateTime: new Date().toISOString(), // Data e hora atual no formato ISO
+        devicePhone: "", // Número do telefone do remetente
+        deviceName: "", // Nome do dispositivo
+        senderName: msg._data.notifyName || "Nome Desconhecido", // Nome do remetente
+        senderMessage: msg.body, // Mensagem enviada pelo usuário
+        userAgent: "BotBot.Chat", // Identificação do bot
+      };
+  
+      // Faz a requisição POST para a API
+      const response = await axios.post(
+        "https://goldplay.sigma.st/api/chatbot/mVLl9vYDQw/rlKWO3Wzo7",
+        postData
+      );
+  
+      // Verifica se a resposta contém dados
+      if (response.data) {
+        const tempFilePath = "./temp_response.json"; // Caminho do arquivo temporário
+  
+        // Salva os dados retornados no arquivo JSON
+        fs.writeFileSync(tempFilePath, JSON.stringify(response.data, null, 2), "utf8");
+  
+        // Extrai os dados "username" e "password" da resposta
+        const { username, password } = response.data;
+  
+        // Verifica se os dados existem antes de enviar
+        if (username && password) {
+          await msg.reply(
+            `✅ As informações foram obtidas com sucesso!\n\n` +
+            `🔑 *Username:* ${username}\n` +
+            `🔒 *Password:* ${password}`
+          );
+        } else {
+          await msg.reply("⚠️ A API não retornou os campos 'username' e 'password'.");
+        }
+      } else {
+        await msg.reply("⚠️ A API não retornou dados.");
+      }
+    } catch (error) {
+      console.error("Erro ao fazer a requisição para a API:", error);
+      await msg.reply("⚠️ Ocorreu um erro ao tentar obter as informações.");
+    }
+  
+    return;
+  }
 
 if (msg.body.toLowerCase() === "/log") {
   if (msg.from !== `${adminNumber}@c.us`) {
