@@ -1,12 +1,6 @@
 const axios = require("axios");
 const fs = require("fs");
 
-function gerarIpAleatorio() {
-    return `${Math.floor(Math.random() * 256)}.${Math.floor(
-      Math.random() * 256
-    )}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
-  }
-
 async function gerarTeste(msg, app) {
   try {
     const postData = {
@@ -19,16 +13,9 @@ async function gerarTeste(msg, app) {
       userAgent: "BotBot.Chat",
     };
 
-    const ipAleatorio = gerarIpAleatorio();
-
     const response = await axios.post(
       "https://goldplay.sigma.st/api/chatbot/mVLl9vYDQw/rlKWO3Wzo7",
-      postData,
-      {
-        headers: {
-          "X-Forwarded-For": ipAleatorio, // Adiciona o IP aleatório no cabeçalho
-        },
-      }
+      postData
     );
 
     if (response.data) {
