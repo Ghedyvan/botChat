@@ -397,10 +397,10 @@ async function handleMessage(msg) {
 
   if (
     !userSessions.has(chatId) ||
-    now - userSessions.get(chatId).timestamp > 12 * 60 * 60 * 1000
+    now - userSessions.get(chatId).timestamp > 24 * 60 * 60 * 1000
   ) {
     if (contatoSalvo) return;
-    userSessions.set(chatId, { step: "menu", timestamp: now, invalidCount: 0 });
+    userSessions.set(chatId, { step: "menu", timestamp: Date.now(), invalidCount: 0 });
     await msg.reply(
       "Olá! Como posso te ajudar? Responda com o número da opção que deseja:\n\n" +
         "1️⃣ Conhecer nossos planos de IPTV\n" +
@@ -708,17 +708,29 @@ async function handleMessage(msg) {
   } else if (session.step === "android"  || session.step === "tvbox") {
     if(msg.body === "1"){
       session.step = "gerouTesteAndroid";
-      await gerarTeste(msg, "iptvstream");
+      try {
+        await gerarTeste(msg, "iptvstream");
+      } catch (error) {
+        console.error("Erro ao gerar teste:", error);
+      }
     }
   } else if (session.step === "iphone"){
     if(msg.body === "1"){
       session.step = "gerouTesteIphone";
-      await gerarTeste(msg, "smarters");
+      try {
+        await gerarTeste(msg, "smarters");
+      } catch (error) {
+        console.error("Erro ao gerar teste:", error);
+      }
     }
   } else if (session.step === "samsung" || session.step === "roku" ){
     if(msg.body === "1"){
       session.step = "gerouTesteIphone";
-      await gerarTeste(msg, "xcloud");
+      try {
+        await gerarTeste(msg, "xcloud");
+      } catch (error) {
+        console.error("Erro ao gerar teste:", error);
+      }
     }
   }
 }
