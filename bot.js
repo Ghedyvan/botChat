@@ -15,7 +15,7 @@ const axios = require("axios");
 
 function limparLogAntigo() {
   const doisDiasAtras = new Date();
-  doisDiasAtras.setDate(doisDiasAtras.getDate() - 2); 
+  doisDiasAtras.setDate(doisDiasAtras.getDate() - 2);
 
   if (!fs.existsSync(logFile)) {
     console.log("Arquivo de log não encontrado.");
@@ -26,25 +26,27 @@ function limparLogAntigo() {
   const linhas = logContent.split("\n");
 
   const linhasFiltradas = linhas.filter((linha) => {
-    const match = linha.match(/\[(\d{2})\/(\d{2})\/(\d{4}) - (\d{2})-(\d{2})\]/);
-    if (!match) return false; 
+    const match = linha.match(
+      /\[(\d{2})\/(\d{2})\/(\d{4}) - (\d{2})-(\d{2})\]/
+    );
+    if (!match) return false;
 
     const [_, dia, mes, ano] = match;
-    const dataLinha = new Date(`${ano}-${mes}-${dia}`); 
+    const dataLinha = new Date(`${ano}-${mes}-${dia}`);
 
-    return dataLinha >= doisDiasAtras; 
+    return dataLinha >= doisDiasAtras;
   });
 
   fs.writeFileSync(logFile, linhasFiltradas.join("\n"), "utf8");
   console.log("Log antigo removido.");
 }
 
-setInterval(limparLogAntigo, 48 * 60 * 60 * 1000); 
+setInterval(limparLogAntigo, 48 * 60 * 60 * 1000);
 function registrarLog(mensagem) {
   const agora = new Date();
   const dataHora = `[${agora.toLocaleDateString("pt-BR")} - ${agora
     .toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-    .replace(":", "-")}]`; 
+    .replace(":", "-")}]`;
   const logMensagem = `${dataHora} ${mensagem}\n`;
 
   fs.appendFileSync(logFile, logMensagem, "utf8");
@@ -68,7 +70,6 @@ if (fs.existsSync(indicacoesFile)) {
 function salvarIndicacoes() {
   fs.writeFileSync(indicacoesFile, JSON.stringify(indicacoes, null, 2));
 }
-
 
 const client = new Client({
   authStrategy: new LocalAuth(),
@@ -105,8 +106,8 @@ client.on("ready", () => {
   registrarLog(mensagem);
 });
 
-let modoAusente = false; 
-const avisosEnviados = new Set(); 
+let modoAusente = false;
+const avisosEnviados = new Set();
 
 async function handleMessage(msg) {
   if (msg.from.endsWith("@g.us")) return;
@@ -114,115 +115,73 @@ async function handleMessage(msg) {
   const chatId = msg.from;
 
   if (msg.body.toLowerCase() === "/tst") {
-    try {
-      // Prepara os dados para o POST
-      const postData = {
-        appName: "com.whatsapp",
-        messageDateTime: new Date().toISOString(), // Data e hora atual no formato ISO
-        devicePhone: "", // Número do telefone do remetente
-        deviceName: "", // Nome do dispositivo
-        senderName: msg._data.notifyName || "Nome Desconhecido", // Nome do remetente
-        senderMessage: msg.body, // Mensagem enviada pelo usuário
-        userAgent: "BotBot.Chat", // Identificação do bot
-      };
-  
-      // Faz a requisição POST para a API
-      const response = await axios.post(
-        "https://goldplay.sigma.st/api/chatbot/mVLl9vYDQw/rlKWO3Wzo7",
-        postData
-      );
-  
-      // Verifica se a resposta contém dados
-      if (response.data) {
-        const tempFilePath = "./temp_response.json"; // Caminho do arquivo temporário
-  
-        // Salva os dados retornados no arquivo JSON
-        fs.writeFileSync(tempFilePath, JSON.stringify(response.data, null, 2), "utf8");
-  
-        // Extrai os dados "username" e "password" da resposta
-        const { username, password } = response.data;
-  
-        // Verifica se os dados existem antes de enviar
-        if (username && password) {
-          await msg.reply(
-            `✅ As informações foram obtidas com sucesso!\n\n` +
-            `🔑 *Username:* ${username}\n` +
-            `🔒 *Password:* ${password}`
-          );
-        } else {
-          await msg.reply("⚠️ A API não retornou os campos 'username' e 'password'.");
-        }
-      } else {
-        await msg.reply("⚠️ A API não retornou dados.");
-      }
-    } catch (error) {
-      console.error("Erro ao fazer a requisição para a API:", error);
-      await msg.reply("⚠️ Ocorreu um erro ao tentar obter as informações.");
-    }
-  
+    await gerarTeste(msg, "appName");
     return;
   }
 
-if (msg.body.toLowerCase() === "/log") {
-  if (msg.from !== `${adminNumber}@c.us`) {
-    await msg.reply("⚠️ Você não tem permissão para usar este comando.");
-    return;
-  }
-
-  const logFilePath = "./bot.log"; // Caminho do arquivo de log
-  const pdfFilePath = "./bot_log.pdf"; // Caminho do arquivo PDF gerado
-
-  try {
-    // Verifica se o arquivo de log existe
-    if (!fs.existsSync(logFilePath)) {
-      await msg.reply("⚠️ O arquivo de log não foi encontrado.");
+  if (msg.body.toLowerCase() === "/log") {
+    if (msg.from !== `${adminNumber}@c.us`) {
+      await msg.reply("⚠️ Você não tem permissão para usar este comando.");
       return;
     }
 
-    // Lê o conteúdo do arquivo de log
-    const logContent = fs.readFileSync(logFilePath, "utf8");
+    const logFilePath = "./bot.log"; // Caminho do arquivo de log
+    const pdfFilePath = "./bot_log.pdf"; // Caminho do arquivo PDF gerado
 
-    // Cria um documento PDF
-    const doc = new PDFDocument();
-    const writeStream = fs.createWriteStream(pdfFilePath);
-    doc.pipe(writeStream);
+    try {
+      // Verifica se o arquivo de log existe
+      if (!fs.existsSync(logFilePath)) {
+        await msg.reply("⚠️ O arquivo de log não foi encontrado.");
+        return;
+      }
 
-    // Adiciona o conteúdo do log ao PDF
-    doc.fontSize(12).text(logContent, { align: "left" });
-    doc.end();
+      // Lê o conteúdo do arquivo de log
+      const logContent = fs.readFileSync(logFilePath, "utf8");
 
-    // Aguarda a conclusão da escrita do PDF
-    writeStream.on("finish", async () => {
-      // Converte o PDF em um objeto MessageMedia
-      const pdfMedia = MessageMedia.fromFilePath(pdfFilePath);
+      // Cria um documento PDF
+      const doc = new PDFDocument();
+      const writeStream = fs.createWriteStream(pdfFilePath);
+      doc.pipe(writeStream);
 
-      // Envia o PDF para o WhatsApp
-      await client.sendMessage(msg.from, pdfMedia, {
-        caption: "📄 Aqui está o arquivo de log do bot em formato PDF.",
+      // Adiciona o conteúdo do log ao PDF
+      doc.fontSize(12).text(logContent, { align: "left" });
+      doc.end();
+
+      // Aguarda a conclusão da escrita do PDF
+      writeStream.on("finish", async () => {
+        // Converte o PDF em um objeto MessageMedia
+        const pdfMedia = MessageMedia.fromFilePath(pdfFilePath);
+
+        // Envia o PDF para o WhatsApp
+        await client.sendMessage(msg.from, pdfMedia, {
+          caption: "📄 Aqui está o arquivo de log do bot em formato PDF.",
+        });
+
+        // Remove o arquivo PDF após o envio (opcional)
+        fs.unlinkSync(pdfFilePath);
       });
+    } catch (error) {
+      console.error("Erro ao gerar ou enviar o arquivo PDF:", error);
+      await msg.reply("⚠️ Ocorreu um erro ao tentar enviar o arquivo de log.");
+    }
 
-      // Remove o arquivo PDF após o envio (opcional)
-      fs.unlinkSync(pdfFilePath);
-    });
-  } catch (error) {
-    console.error("Erro ao gerar ou enviar o arquivo PDF:", error);
-    await msg.reply("⚠️ Ocorreu um erro ao tentar enviar o arquivo de log.");
+    return;
   }
 
-  return;
-}
-
-  if (msg.body.toLowerCase() === "/pontos" || msg.body.toLowerCase() === "/recompensas") {
+  if (
+    msg.body.toLowerCase() === "/pontos" ||
+    msg.body.toLowerCase() === "/recompensas"
+  ) {
     const chatId = msg.from;
-  
+
     if (!indicacoes[chatId]) {
       await msg.reply("📊 Você ainda não possui nenhuma indicação registrada.");
       return;
     }
-  
+
     const { nome, indicacoes: totalIndicacoes } = indicacoes[chatId];
     const pontos = totalIndicacoes * 10; // Calcula os pontos com base nas indicações
-  
+
     await client.sendMessage(chatId, bannerIndicacao, {
       caption: `📊 ${nome}, você possui ${totalIndicacoes} indicação(ões), o que equivale a ${pontos} ponto(s).`,
     });
@@ -230,7 +189,6 @@ if (msg.body.toLowerCase() === "/log") {
   }
 
   if (msg.body.toLowerCase() === "/indicacoes_todos") {
-
     if (msg.from !== `${adminNumber}@c.us`) {
       await msg.reply("⚠️ Você não tem permissão para usar este comando.");
       return;
@@ -239,48 +197,55 @@ if (msg.body.toLowerCase() === "/log") {
       await msg.reply("📊 Nenhuma indicação registrada até o momento.");
       return;
     }
-  
+
     let resposta = "📋 *Lista de Indicações:*\n\n";
     for (const [numero, dados] of Object.entries(indicacoes)) {
       const numeroSemSufixo = numero.replace("@c.us", "");
-      resposta += `📞 *${numeroSemSufixo || "Contato Desconhecido"}* ${dados.nome}: ${dados.indicacoes} indicação(ões)\n`;
+      resposta += `📞 *${numeroSemSufixo || "Contato Desconhecido"}* ${
+        dados.nome
+      }: ${dados.indicacoes} indicação(ões)\n`;
     }
-  
+
     await msg.reply(resposta);
     return;
   }
 
   if (msg.body.toLowerCase() === "/indiquei") {
     const chatId = msg.from;
-  
+
     const contato = await client.getContactById(chatId);
-    const nomeContato = contato.pushname || contato.name || "Contato Desconhecido";
-  
+    const nomeContato =
+      contato.pushname || contato.name || "Contato Desconhecido";
+
     if (!indicacoes[chatId]) {
       indicacoes[chatId] = { nome: nomeContato, indicacoes: 0 };
     } else {
-      indicacoes[chatId].nome = nomeContato; 
+      indicacoes[chatId].nome = nomeContato;
     }
-  
+
     indicacoes[chatId].indicacoes += 1;
     const pontos = indicacoes[chatId].indicacoes * 10;
-  
-    salvarIndicacoes(); 
-    fazerBackupIndicacoes(); 
-  
+
+    salvarIndicacoes();
+    fazerBackupIndicacoes();
+
     await msg.reply(
       `✅ Indicação registrada com sucesso! ${indicacoes[chatId].nome}, você agora possui ${indicacoes[chatId].indicacoes} indicação(ões), o que equivale a ${pontos} ponto(s).\n\n` +
-      'Se desejar ver a tabela de recompensas, envie a mensagem abaixo para mim:\n\n' +
-      '/recompensas'
+        "Se desejar ver a tabela de recompensas, envie a mensagem abaixo para mim:\n\n" +
+        "/recompensas"
     );
     return;
   }
 
   function fazerBackupIndicacoes() {
     const agora = new Date();
-    const dataHora = `${agora.getFullYear()}-${String(agora.getMonth() + 1).padStart(2, "0")}-${String(agora.getDate()).padStart(2, "0")}_${String(agora.getHours()).padStart(2, "0")}-${String(agora.getMinutes()).padStart(2, "0")}`;
+    const dataHora = `${agora.getFullYear()}-${String(
+      agora.getMonth() + 1
+    ).padStart(2, "0")}-${String(agora.getDate()).padStart(2, "0")}_${String(
+      agora.getHours()
+    ).padStart(2, "0")}-${String(agora.getMinutes()).padStart(2, "0")}`;
     const backupFile = `./backups/indicacoes_backup_${dataHora}.json`;
-  
+
     try {
       if (!fs.existsSync("./backups")) {
         fs.mkdirSync("./backups");
@@ -297,21 +262,22 @@ if (msg.body.toLowerCase() === "/log") {
   if (msg.body.toLowerCase().startsWith("/ajustar")) {
     const [_, quantidade] = msg.body.split(" ");
     const chatId = msg.from;
-  
+
     if (!quantidade || isNaN(quantidade)) {
       await msg.reply("⚠️ Uso correto: /ajustar <quantidade>");
       return;
     }
-  
+
     const contato = await client.getContactById(chatId);
-    const nomeContato = contato.pushname || contato.name || "Contato Desconhecido";
-  
+    const nomeContato =
+      contato.pushname || contato.name || "Contato Desconhecido";
+
     indicacoes[chatId] = {
       nome: nomeContato,
       indicacoes: parseInt(quantidade, 10),
     };
-  
-    salvarIndicacoes(); 
+
+    salvarIndicacoes();
     await msg.reply(
       `✅ O número de indicações foi ajustado para ${indicacoes[chatId].indicacoes} para o contato ${indicacoes[chatId].nome}.`
     );
@@ -319,7 +285,7 @@ if (msg.body.toLowerCase() === "/log") {
   }
 
   const contatoSalvo = await isContactSaved(chatId);
-  
+
   if (
     msg.body.toLowerCase().includes("obrigado") ||
     msg.body.toLowerCase().includes("obrigada") ||
@@ -331,18 +297,15 @@ if (msg.body.toLowerCase() === "/log") {
     return;
   }
 
-  if (
-    msg.body.toLowerCase() === "bom dia") {
+  if (msg.body.toLowerCase() === "bom dia") {
     await msg.reply("Bom dia!");
     return;
   }
-  if (
-    msg.body.toLowerCase() === "boa tarde") {
+  if (msg.body.toLowerCase() === "boa tarde") {
     await msg.reply("Boa tarde!");
     return;
   }
-  if (
-    msg.body.toLowerCase() === "boa noite") {
+  if (msg.body.toLowerCase() === "boa noite") {
     await msg.reply("Boa noite!");
     return;
   }
@@ -358,7 +321,7 @@ if (msg.body.toLowerCase() === "/log") {
       await msg.reply("⚠️ Você não tem permissão para usar este comando.");
       return;
     }
-  
+
     await msg.reply(
       "*Lista de comandos do BOT* \n\n" +
         "📋 *Comandos gerais:*\n" +
@@ -385,7 +348,7 @@ if (msg.body.toLowerCase() === "/log") {
         "*/indicacoes -* Exibe o número de indicações que você fez\n" +
         "*/jogos -* Exibe os jogos do dia\n\n" +
         "📋 *Outros comandos:*\n" +
-        "*/comandos -* Exibe esta lista de comandos\n" 
+        "*/comandos -* Exibe esta lista de comandos\n"
     );
     return;
   }
@@ -410,7 +373,12 @@ if (msg.body.toLowerCase() === "/log") {
     return;
   }
 
-  if (msg.body.toLowerCase().includes("chave") && msg.body.toLowerCase().includes("envia") || msg.body.toLowerCase().includes("manda") && msg.body.toLowerCase().includes("chave") ) {
+  if (
+    (msg.body.toLowerCase().includes("chave") &&
+      msg.body.toLowerCase().includes("envia")) ||
+    (msg.body.toLowerCase().includes("manda") &&
+      msg.body.toLowerCase().includes("chave"))
+  ) {
     await msg.reply("Segue abaixo a chave pix do tipo aleatória:");
     await msg.reply("c366c9e3-fb7c-431f-957e-97287f4f964f");
     return;
@@ -522,7 +490,9 @@ if (msg.body.toLowerCase() === "/log") {
           "✅ Siga os passos abaixo para configurar:\n\n" +
           "📲 Procura na PlayStore e baixa um aplicativo chamado *IPTV STREAM PLAYER*.\n\n" +
           "📌 Depois, pode abrir, irá aparecer uma tela com 3 botões, você seleciona o primeiro e ele irá te direcionar à página onde pede os dados de login.\n" +
-          "🚀 Quando chegar nessa tela, me informe.",
+          "🚀 Quando chegar nessa tela, me confirme\n\n" +
+          "1️⃣ Cheguei na tela de login\n" +
+          "0️⃣ Menu inicial",
       });
     } else if (msg.body === "3" || msg.body.toLowerCase().includes("smarttv")) {
       session.step = "smarttv";
@@ -557,17 +527,20 @@ if (msg.body.toLowerCase() === "/log") {
           "✅ Siga os passos abaixo para configurar:\n\n" +
           "📲 Procura na PlayStore e baixa um aplicativo chamado *IPTV STREAM PLAYER*.\n\n" +
           "📌 Depois, pode abrir, irá aparecer uma tela com 3 botões, você seleciona o primeiro e ele irá te direcionar à página onde pede os dados de login.\n" +
-          "🚀 Quando chegar nessa tela, me informe.",
+          "🚀 Quando chegar na tela de login, me avise que te envio seus dados!\n\n" +
+          "1️⃣ Cheguei na tela de login\n" +
+          "0️⃣ Menu inicial",
       });
     } else if (msg.body === "2") {
       session.step = "iphone";
       session.invalidCount = 0;
       await msg.reply(
         "✅ Siga os passos abaixo para configurar:\n\n" +
-          "1. Baixe o *Smarters Player Lite* na AppStore\n" +
-          "2. Abra o app e aceite os termos (Se ele pedir)\n" +
-          "3. Selecione *Xtreme Codes* na tela\n\n" +
-          "🔑 Quando chegar na tela de login, me avise que te envio seus dados!"
+          "📲 Procura na AppStore e baixa um aplicativo chamado *Smarters Player Lite*.\n" +
+          "📌 Ao abrir o app, aceite os termos se ele pedir e selecione a opção *Xtreme Codes*.\n" +
+          "🚀 Quando chegar na tela de login, me avise que te envio seus dados!\n\n" +
+          "1️⃣ Cheguei na tela de login\n" +
+          "0️⃣ Menu inicial"
       );
     } else {
       session.invalidCount = (session.invalidCount || 0) + 1;
@@ -583,20 +556,22 @@ if (msg.body.toLowerCase() === "/log") {
       session.invalidCount = 0;
       await msg.reply(
         "✅ Siga os passos abaixo para configurar:\n\n" +
-          "▸ Abra a loja de apps da TV (*APP* ou *LG Content Store*)\n" +
-          "▸ Instale o *IPTVSmartersPRO*\n" +
-          "▸ Abra o app > aceite os termos\n\n" +
-          "📩 Quando chegar na tela de login, me avise que te envio seus dados!"
+          "📺 Na sua TV, abra a loja de apps (*APP Store* ou *LG Content Store*).\n" +
+          "⬇️ Procure e instale o aplicativo *IPTV Smarters PRO*.\n" +
+          "📌 Depois de instalar, abra o app e aceite os termos que aparecerem.\n" +
+          "🚀 Quando chegar na tela de login, me avise que te envio seus dados!"
       );
     } else if (msg.body === "2") {
       session.step = "samsung";
       session.invalidCount = 0;
       await msg.reply(
         "✅ Siga os passos abaixo para configurar:\n\n" +
-          "1️⃣ *Abra* a loja de aplicativos da sua TV\n" +
-          "2️⃣ *Procure* pelo aplicativo *xCloud TV* e instale\n" +
-          "3️⃣ *Abra* o aplicativo e me informe para eu te enviar os dados de acesso\n\n" +
-          "⚠️ *Obs:* Se não encontrar o xCloud TV, me avise que te ajudo a baixar outro app."
+          "📺 Abra a loja de aplicativos da sua TV.\n" +
+          "🔍 Procure e instale o app chamado *xCloud TV*.\n" +
+          "📌 Depois de instalar, abra o app e me avise pra eu te enviar os dados de acesso.\n" +
+          "⚠️ *Obs:* Se não encontrar o xCloud TV, me avise que te ajudo a baixar outro app.\n\n" +
+          "1️⃣ Já instalei e abri o app\n" +
+          "0️⃣ Menu inicial"
       );
     } else if (msg.body === "3") {
       session.step = "android";
@@ -605,18 +580,22 @@ if (msg.body.toLowerCase() === "/log") {
         caption:
           "✅ Siga os passos abaixo para configurar:\n\n" +
           "📲 Procura na PlayStore e baixa um aplicativo chamado *IPTV STREAM PLAYER*.\n\n" +
-          "📌 Depois, pode abrir, irá aparecer uma tela com 3 botões, você seleciona *LOGIN WITH NEW USER ACCOUNT* e ele irá te direcionar à página onde pede os dados de login.\n" +
-          "🚀 Quando chegar nessa tela, me informe para eu te enviar os dados.",
+          "📌 Depois, pode abrir, irá aparecer uma tela com 3 botões, você seleciona o primeiro e ele irá te direcionar à página onde pede os dados de login.\n" +
+          "🚀 Quando chegar na tela de login, me avise que te envio seus dados!\n\n" +
+          "1️⃣ Cheguei na tela de login\n" +
+          "0️⃣ Menu inicial",
       });
     } else if (msg.body === "4") {
       session.step = "roku";
       session.invalidCount = 0;
       await msg.reply(
         "✅ Siga os passos abaixo para configurar:\n\n" +
-          "1️⃣ *Abra* a loja de aplicativos da sua TV\n" +
-          "2️⃣ *Procure* pelo aplicativo *xCloud TV* e instale\n" +
-          "3️⃣ *Abra* o aplicativo e me informe para eu te enviar os dados de acesso\n\n" +
-          "⚠️ *Obs:* _Se não encontrar o xCloud TV, me avise que te ajudo a baixar outro app._"
+          "📺 Abra a loja de aplicativos da sua TV.\n" +
+          "🔍 Procure e instale o aplicativo *xCloud TV*.\n" +
+          "📌 Depois de instalar, abra o app e me avise pra eu te enviar os dados de acesso.\n" +
+          "⚠️ *Obs:* _Se não encontrar o xCloud TV, me avise que te ajudo a baixar outro app._\n\n" +
+          "1️⃣ Já instalei e abri o app\n" +
+          "0️⃣ Menu inicial"
       );
     } else if (msg.body === "5") {
       session.step = "outro";
@@ -726,6 +705,21 @@ if (msg.body.toLowerCase() === "/log") {
       );
       await msg.reply("c366c9e3-fb7c-431f-957e-97287f4f964f");
     }
+  } else if (session.step === "android"  || session.step === "tvbox") {
+    if(msg.body === "1"){
+      session.step = "gerouTesteAndroid";
+      await gerarTeste(msg, "iptvstream");
+    }
+  } else if (session.step === "iphone"){
+    if(msg.body === "1"){
+      session.step = "gerouTesteIphone";
+      await gerarTeste(msg, "smarters");
+    }
+  } else if (session.step === "samsung" || session.step === "roku" ){
+    if(msg.body === "1"){
+      session.step = "gerouTesteIphone";
+      await gerarTeste(msg, "xcloud");
+    }
   }
 }
 
@@ -738,10 +732,10 @@ async function isContactSaved(chatId) {
       const isSaved = contact.isMyContact;
       return isSaved;
     }
-    return false; 
+    return false;
   } catch (error) {
     console.error("Erro ao verificar se o contato está salvo:", error);
-    return false; 
+    return false;
   }
 }
 
@@ -764,5 +758,5 @@ client.initialize();
 
 module.exports = {
   client,
-  handleMessage, 
+  handleMessage,
 };
