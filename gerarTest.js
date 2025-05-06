@@ -1,21 +1,34 @@
 const axios = require("axios");
 const fs = require("fs");
 
+function gerarIpAleatorio() {
+    return `${Math.floor(Math.random() * 256)}.${Math.floor(
+      Math.random() * 256
+    )}.${Math.floor(Math.random() * 256)}.${Math.floor(Math.random() * 256)}`;
+  }
+
 async function gerarTeste(msg, app) {
   try {
     const postData = {
       appName: "com.whatsapp",
       messageDateTime: new Date().toISOString(),
-      devicePhone: msg.from.replace("@c.us", ""), // Número do telefone do remetente
-      deviceName: "Dispositivo WhatsApp",
+      devicePhone: "",
+      deviceName: "",
       senderName: msg._data.notifyName || "Nome Desconhecido",
       senderMessage: msg.body,
       userAgent: "BotBot.Chat",
     };
 
+    const ipAleatorio = gerarIpAleatorio();
+
     const response = await axios.post(
       "https://goldplay.sigma.st/api/chatbot/mVLl9vYDQw/rlKWO3Wzo7",
-      postData
+      postData,
+      {
+        headers: {
+          "X-Forwarded-For": ipAleatorio, // Adiciona o IP aleatório no cabeçalho
+        },
+      }
     );
 
     if (response.data) {
@@ -37,14 +50,16 @@ async function gerarTeste(msg, app) {
             `✅ Preencha os 3 campos na ordem abaixo:\n\n` +
               `🛜 *Provedor:* goldplaybr\n` +
               `👤 *Usuário:* ${username}\n` +
-              `🔑 *Senha:* ${password}`
+              `🔑 *Senha:* ${password}\n\n` +
+              'Seu teste tem duração de 3h, fique a vontade para testar e conhecer nossos conteúdos 😉'
           );
         } else if (app === "iptvstream") {
           await msg.reply(
             `✅ Preencha os 3 campos na ordem abaixo:\n\n` +
               `👤 *Usuário:* ${username}\n` +
               `🔑 *Senha:* ${password}\n` +
-              `🛜 *Servidor:* http://gbbrtk.online\n`
+              `🛜 *Servidor:* http://gbbrtk.online\n\n` +
+              'Seu teste tem duração de 3h, fique a vontade para testar e conhecer nossos conteúdos 😉'
           );
         } else if (app === "smarters") {
           await msg.reply(
@@ -52,13 +67,15 @@ async function gerarTeste(msg, app) {
               `👤 *Nome:* gold\n` +
               `👤 *Usuário:* ${username}\n` +
               `🔑 *Senha:* ${password}\n` +
-              `🛜 *Servidor:* http://gpthzhx.top\n`
+              `🛜 *Servidor:* http://gpthzhx.top\n\n` +
+              'Seu teste tem duração de 3h, fique a vontade para testar e conhecer nossos conteúdos 😉'
           );
         } else {
           await msg.reply(
-            `✅ As informações foram obtidas com sucesso!\n\n` +
+            `✅ Preencha os seus dados de acesso\n\n` +
               `🔑 *Username:* ${username}\n` +
-              `🔒 *Password:* ${password}`
+              `🔒 *Password:* ${password}\n\n` +
+              'Seu teste tem duração de 3h, fique a vontade para testar e conhecer nossos conteúdos 😉'
           );
         }
       } else {
