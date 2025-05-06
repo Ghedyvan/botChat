@@ -12,55 +12,6 @@ const adminNumber = "558282371442";
 const logFile = "./bot.log";
 const PDFDocument = require("pdfkit");
 
-if (msg.body.toLowerCase() === "/log") {
-  if (msg.from !== `${adminNumber}@c.us`) {
-    await msg.reply("⚠️ Você não tem permissão para usar este comando.");
-    return;
-  }
-
-  const logFilePath = "./bot.log"; // Caminho do arquivo de log
-  const pdfFilePath = "./bot_log.pdf"; // Caminho do arquivo PDF gerado
-
-  try {
-    // Verifica se o arquivo de log existe
-    if (!fs.existsSync(logFilePath)) {
-      await msg.reply("⚠️ O arquivo de log não foi encontrado.");
-      return;
-    }
-
-    // Lê o conteúdo do arquivo de log
-    const logContent = fs.readFileSync(logFilePath, "utf8");
-
-    // Cria um documento PDF
-    const doc = new PDFDocument();
-    const writeStream = fs.createWriteStream(pdfFilePath);
-    doc.pipe(writeStream);
-
-    // Adiciona o conteúdo do log ao PDF
-    doc.fontSize(12).text(logContent, { align: "left" });
-    doc.end();
-
-    // Aguarda a conclusão da escrita do PDF
-    writeStream.on("finish", async () => {
-      // Converte o PDF em um objeto MessageMedia
-      const pdfMedia = MessageMedia.fromFilePath(pdfFilePath);
-
-      // Envia o PDF para o WhatsApp
-      await client.sendMessage(msg.from, pdfMedia, {
-        caption: "📄 Aqui está o arquivo de log do bot em formato PDF.",
-      });
-
-      // Remove o arquivo PDF após o envio (opcional)
-      fs.unlinkSync(pdfFilePath);
-    });
-  } catch (error) {
-    console.error("Erro ao gerar ou enviar o arquivo PDF:", error);
-    await msg.reply("⚠️ Ocorreu um erro ao tentar enviar o arquivo de log.");
-  }
-
-  return;
-}
-
 function registrarLog(mensagem) {
   const agora = new Date();
   const dataHora = `[${agora.toLocaleDateString("pt-BR")} - ${agora
@@ -133,6 +84,56 @@ async function handleMessage(msg) {
   if (msg.from.endsWith("@g.us")) return;
 
   const chatId = msg.from;
+
+
+if (msg.body.toLowerCase() === "/log") {
+  if (msg.from !== `${adminNumber}@c.us`) {
+    await msg.reply("⚠️ Você não tem permissão para usar este comando.");
+    return;
+  }
+
+  const logFilePath = "./bot.log"; // Caminho do arquivo de log
+  const pdfFilePath = "./bot_log.pdf"; // Caminho do arquivo PDF gerado
+
+  try {
+    // Verifica se o arquivo de log existe
+    if (!fs.existsSync(logFilePath)) {
+      await msg.reply("⚠️ O arquivo de log não foi encontrado.");
+      return;
+    }
+
+    // Lê o conteúdo do arquivo de log
+    const logContent = fs.readFileSync(logFilePath, "utf8");
+
+    // Cria um documento PDF
+    const doc = new PDFDocument();
+    const writeStream = fs.createWriteStream(pdfFilePath);
+    doc.pipe(writeStream);
+
+    // Adiciona o conteúdo do log ao PDF
+    doc.fontSize(12).text(logContent, { align: "left" });
+    doc.end();
+
+    // Aguarda a conclusão da escrita do PDF
+    writeStream.on("finish", async () => {
+      // Converte o PDF em um objeto MessageMedia
+      const pdfMedia = MessageMedia.fromFilePath(pdfFilePath);
+
+      // Envia o PDF para o WhatsApp
+      await client.sendMessage(msg.from, pdfMedia, {
+        caption: "📄 Aqui está o arquivo de log do bot em formato PDF.",
+      });
+
+      // Remove o arquivo PDF após o envio (opcional)
+      fs.unlinkSync(pdfFilePath);
+    });
+  } catch (error) {
+    console.error("Erro ao gerar ou enviar o arquivo PDF:", error);
+    await msg.reply("⚠️ Ocorreu um erro ao tentar enviar o arquivo de log.");
+  }
+
+  return;
+}
 
   if (msg.body.toLowerCase() === "/pontos" || msg.body.toLowerCase() === "/recompensas") {
     const chatId = msg.from;
