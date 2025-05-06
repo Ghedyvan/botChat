@@ -12,6 +12,33 @@ const adminNumber = "558282371442";
 const logFile = "./bot.log";
 const PDFDocument = require("pdfkit");
 
+function limparLogAntigo() {
+  const doisDiasAtras = new Date();
+  doisDiasAtras.setDate(doisDiasAtras.getDate() - 2); 
+
+  if (!fs.existsSync(logFile)) {
+    console.log("Arquivo de log não encontrado.");
+    return;
+  }
+
+  const logContent = fs.readFileSync(logFile, "utf8");
+  const linhas = logContent.split("\n");
+
+  const linhasFiltradas = linhas.filter((linha) => {
+    const match = linha.match(/\[(\d{2})\/(\d{2})\/(\d{4}) - (\d{2})-(\d{2})\]/);
+    if (!match) return false; 
+
+    const [_, dia, mes, ano] = match;
+    const dataLinha = new Date(`${ano}-${mes}-${dia}`); 
+
+    return dataLinha >= doisDiasAtras; 
+  });
+
+  fs.writeFileSync(logFile, linhasFiltradas.join("\n"), "utf8");
+  console.log("Log antigo removido.");
+}
+
+setInterval(limparLogAntigo, 48 * 60 * 60 * 1000); 
 function registrarLog(mensagem) {
   const agora = new Date();
   const dataHora = `[${agora.toLocaleDateString("pt-BR")} - ${agora
@@ -669,7 +696,7 @@ async function isContactSaved(chatId) {
 }
 
 client.on("message", async (msg) => {
-  if (msg.from.endsWith("@g.us")) return;
+  if (msg.from.endsWith("@g.us") || msg.from === "status@broadcast") return;
 
   const logMensagem = `[MENSAGEM RECEBIDA] De: ${msg.from}`;
   console.log(logMensagem);
