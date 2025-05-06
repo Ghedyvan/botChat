@@ -11,7 +11,7 @@ const indicacoesFile = "./indicacoes.json";
 const adminNumber = "558282371442";
 const logFile = "./bot.log";
 const PDFDocument = require("pdfkit");
-const axios = require("axios");
+const gerarTeste = require("./gerarTest");
 
 function limparLogAntigo() {
   const doisDiasAtras = new Date();
