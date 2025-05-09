@@ -442,13 +442,13 @@ async function handleMessage(msg) {
 
   if (
     !userSessions.has(chatId) ||
-    now - userSessions.get(chatId).timestamp > 24 * 60 * 60 * 1000
+    now - userSessions.get(chatId).timestamp > 36 * 60 * 60 * 1000
   ) {
     if (contatoSalvo) return;
     userSessions.set(chatId, { step: "menu", timestamp: Date.now(), invalidCount: 0 });
-    if (session.step !== userSessions.get(chatId).step) {
-      saveSessions(userSessions);
-    }
+
+    saveSessions(userSessions);
+
     await msg.reply(
       "Olá! Como posso te ajudar? Responda com o número da opção que deseja:\n\n" +
         "1️⃣ Conhecer nossos planos de IPTV\n" +
