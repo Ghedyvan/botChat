@@ -26,7 +26,6 @@ function carregarTesteUsers() {
 // Salva os dados no arquivo JSON
 function salvarTesteUsers() {
   fs.writeFileSync(testeUsersFile, JSON.stringify(testeUsers, null, 2), 'utf8');
-  console.log('Dados salvos em testeUsers.json');
 }
 
 // Verifica se um usuário já fez teste
