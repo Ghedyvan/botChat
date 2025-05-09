@@ -1,8 +1,16 @@
 const axios = require("axios");
 const fs = require("fs");
+const { adicionarUsuarioTeste, atualizarUsuarioTeste, jaFezTeste } = require('./testeUsers');
 
 async function gerarTeste(msg, app) {
   try {
+    const userId = msg.from; 
+    
+    if (jaFezTeste(userId)) {
+      atualizarUsuarioTeste(userId, app);
+    } else {
+      adicionarUsuarioTeste(userId, app);
+    }
     const postData = {
       appName: "com.whatsapp",
       messageDateTime: new Date().toISOString(),

@@ -12,6 +12,8 @@ const adminNumber = "558282371442";
 const logFile = "./bot.log";
 const PDFDocument = require("pdfkit");
 const gerarTeste = require("./gerarTest");
+const { listarUsuariosTeste, jaFezTeste } = require('./testeUsers');
+const { saveSessions, loadSessions } = require('./sessionStorage');
 
 function limparLogAntigo() {
   const doisDiasAtras = new Date();
@@ -88,8 +90,8 @@ const client = new Client({
   },
 });
 
-const userSessions = new Map();
-// Eventos do cliente WhatsApp
+const userSessions = loadSessions();
+
 client.on("qr", (qr) => {
   qrcode.generate(qr, { small: true });
 });
@@ -108,6 +110,49 @@ client.on("ready", () => {
 
 let modoAusente = false;
 const avisosEnviados = new Set();
+
+function limparSessoesAntigas() {
+  const agora = Date.now();
+  const limiteTempo = 7 * 24 * 60 * 60 * 1000; // 7 dias em milissegundos
+  let contadorRemovidos = 0;
+  
+  for (const [userId, session] of userSessions.entries()) {
+    if (session.timestamp && (agora - session.timestamp > limiteTempo)) {
+      userSessions.delete(userId);
+      contadorRemovidos++;
+    }
+  }
+  
+  if (contadorRemovidos > 0) {
+    console.log(`${contadorRemovidos} sessões antigas foram removidas.`);
+    registrarLog(`${contadorRemovidos} sessões antigas foram removidas.`);
+    saveSessions(userSessions);
+  }
+}
+
+// Executar a limpeza diariamente
+setInterval(limparSessoesAntigas, 24 * 60 * 60 * 1000);
+
+function configurarSalvamentoAutomatico() {
+  // Salva as sessões a cada 5 minutos
+  setInterval(() => {
+    saveSessions(userSessions);
+    registrarLog("Sessões de usuários salvas automaticamente");
+  }, 5 * 60 * 1000);
+
+  // Salva as sessões quando o processo for encerrado
+  process.on('SIGINT', () => {
+    saveSessions(userSessions);
+    registrarLog("Sessões de usuários salvas antes do encerramento");
+    process.exit(0);
+  });
+  
+  process.on('SIGTERM', () => {
+    saveSessions(userSessions);
+    registrarLog("Sessões de usuários salvas antes do encerramento");
+    process.exit(0);
+  });
+}
 
 async function handleMessage(msg) {
   if (msg.from.endsWith("@g.us")) return;
@@ -401,6 +446,9 @@ async function handleMessage(msg) {
   ) {
     if (contatoSalvo) return;
     userSessions.set(chatId, { step: "menu", timestamp: Date.now(), invalidCount: 0 });
+    if (session.step !== userSessions.get(chatId).step) {
+      saveSessions(userSessions);
+    }
     await msg.reply(
       "Olá! Como posso te ajudar? Responda com o número da opção que deseja:\n\n" +
         "1️⃣ Conhecer nossos planos de IPTV\n" +
@@ -446,9 +494,28 @@ async function handleMessage(msg) {
     } else if (msg.body === "2") {
       session.step = "testar";
       session.invalidCount = 0;
-      await msg.reply(
-        "Em qual dispositivo gostaria de realizar o teste?\n\n1️⃣ Celular\n2️⃣ TV Box\n3️⃣ Smart TV\n4️⃣ Computador\n\n0️⃣ Menu inicial"
-      );
+    
+      try {
+        const userJaFezTeste = jaFezTeste(msg.from);
+        if (userJaFezTeste) {
+          session.step = "ativar"
+          await client.sendMessage(msg.from, tabelaprecos, {
+            caption:
+              "😅 *Oops! Parece que você já usou o seu teste gratuito.*\n\nPodemos disponibilizar apenas um teste por pessoa. Mas fica tranquilo! Se quiser ativar o acesso, é só escolher um dos nossos planos.\n\n" +
+              "1️⃣ Plano CINEMA (R$ 18,00 por mês)\n" +
+              "2️⃣ Plano COMPLETO (R$ 20,00 por mês)\n" +
+              "3️⃣ Plano DUO (R$ 35,00 por mês)\n\n" +
+              "0️⃣ Menu inicial\n\n" +
+              "_Qualquer plano tem acréscimo de 5$ caso seja pago após o vencimento_",
+          });
+        } else {
+          await msg.reply(
+            "Em qual dispositivo gostaria de realizar o teste?\n\n1️⃣ Celular\n2️⃣ TV Box\n3️⃣ Smart TV\n4️⃣ Computador\n\n0️⃣ Menu inicial"
+          );
+        }
+      } catch (error) {
+        console.error("Erro ao gerar teste:", error);
+      }
     } else if (msg.body === "3") {
       session.step = "comoFunciona";
       session.invalidCount = 0;
@@ -466,7 +533,7 @@ async function handleMessage(msg) {
           "2️⃣ Plano COMPLETO (R$ 20,00 por mês)\n" +
           "3️⃣ Plano DUO (R$ 35,00 por mês)\n\n" +
           "0️⃣ Menu inicial\n\n" +
-          "_O plano completo tem acréscimo de 5$ caso seja pago após o vencimento_",
+          "_Qualquer plano tem acréscimo de 5$ caso seja pago após o vencimento_",
       });
     } else if (msg.body === "5") {
       session.step = "humano";
@@ -766,6 +833,7 @@ client.on("message", async (msg) => {
   }
 });
 
+configurarSalvamentoAutomatico();
 client.initialize();
 
 module.exports = {
