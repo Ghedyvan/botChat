@@ -43,7 +43,7 @@ function limparLogAntigo() {
   console.log("Log antigo removido.");
 }
 
-setInterval(limparLogAntigo, 48 * 60 * 60 * 1000);
+setInterval(limparLogAntigo, 6 * 60 * 60 * 1000);
 function registrarLog(mensagem) {
   const agora = new Date();
   const dataHora = `[${agora.toLocaleDateString("pt-BR")} - ${agora
@@ -130,14 +130,12 @@ function limparSessoesAntigas() {
   }
 }
 
-// Executar a limpeza diariamente
 setInterval(limparSessoesAntigas, 24 * 60 * 60 * 1000);
 
 function configurarSalvamentoAutomatico() {
   // Salva as sessões a cada 5 minutos
   setInterval(() => {
     saveSessions(userSessions);
-    registrarLog("Sessões de usuários salvas automaticamente");
   }, 5 * 60 * 1000);
 
   // Salva as sessões quando o processo for encerrado
@@ -354,7 +352,7 @@ async function handleMessage(msg) {
     await msg.reply("Boa noite!");
     return;
   }
-  if (msg.body.toLowerCase() === "/ausente") {
+  if (msg.body.toLowerCase() === "/ausente" || msg.body.toLowerCase() === "/inativo") {
     modoAusente = true;
     avisosEnviados.clear();
     await msg.reply("Modo ausente ativado.");
@@ -429,13 +427,12 @@ async function handleMessage(msg) {
     return;
   }
 
-  // Verifica se o modo ausente está ativado
   if (modoAusente && !avisosEnviados.has(chatId)) {
-    // Envia o aviso apenas se ainda não foi enviado para este usuário
     await msg.reply(
-      "No momento estamos ausentes, então o atendimento humano pode demorar um pouco mais que o normal."
+      "⚠️ *Oops, no momento, o atendimento humano está indisponível.*\n\n"+
+      "Nosso robô continua por aqui para te ajudar com o que for possível. Se precisar de algo específico, responderemos assim que possível."
     );
-    avisosEnviados.add(chatId); // Marca o usuário como já avisado
+    avisosEnviados.add(chatId);
   }
 
   const now = Date.now();
