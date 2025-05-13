@@ -429,7 +429,6 @@ async function handleMessage(msg) {
     return;
   }
 
-  // Verifica se o modo ausente está ativado
   if (modoAusente && !avisosEnviados.has(chatId)) {
     // Envia o aviso apenas se ainda não foi enviado para este usuário
     await msg.reply(
