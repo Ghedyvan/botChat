@@ -1,0 +1,25 @@
+[15/05/2025 - 00-52] Erro durante inicialização: loadSessions is not a function
+[15/05/2025 - 00-53] Autenticado com sucesso!
+[15/05/2025 - 00-53] Bot está pronto!
+[15/05/2025 - 00-54] [MENSAGEM RECEBIDA] De: 5511948944452@c.us [Contato salvo: NO] [Texto: "Olá"]
+[15/05/2025 - 00-54] [ERRO] Ao processar mensagem de 5511948944452@c.us: ENOENT: no such file or directory, open './streamplayer.png'
+[15/05/2025 - 00-55] [MENSAGEM RECEBIDA] De: 558282371442@c.us [Contato salvo: NO] [Texto: "Salve"]
+[15/05/2025 - 00-55] [ERRO] Ao processar mensagem de 558282371442@c.us: ENOENT: no such file or directory, open './streamplayer.png'
+[15/05/2025 - 00-56] [MENSAGEM RECEBIDA] De: 558282371442@c.us [Contato salvo: NO] [Texto: ""]
+[15/05/2025 - 00-56] Erro não tratado: ENOENT: no such file or directory, open './streamplayer.png'
+[15/05/2025 - 00-56] [MENSAGEM RECEBIDA] De: 558282371442@c.us [Contato salvo: NO] [Texto: "👎👎👎👎"]
+[15/05/2025 - 00-56] Erro não tratado: ENOENT: no such file or directory, open './streamplayer.png'
+[15/05/2025 - 00-56] [MENSAGEM RECEBIDA] De: 558282371442@c.us [Contato salvo: NO] [Texto: "Ddddd"]
+[15/05/2025 - 00-58] Autenticado com sucesso!
+[15/05/2025 - 00-58] Bot está pronto!
+[15/05/2025 - 00-58] [MENSAGEM RECEBIDA] De: 558282371442@c.us [Contato salvo: YES] [Texto: "Esse omi"]
+[15/05/2025 - 01-00] [MENSAGEM RECEBIDA] De: 558282371442@c.us [Contato salvo: YES] [Texto: "Boa noite"]
+[15/05/2025 - 01-00] [ERRO] Ao processar mensagem de 558282371442@c.us: require(...).registrarLog is not a function
+[15/05/2025 - 01-01] [MENSAGEM RECEBIDA] De: 5511948944452@c.us [Contato salvo: NO] [Texto: "1"]
+[15/05/2025 - 01-01] [MENSAGEM RECEBIDA] De: 5511948944452@c.us [Contato salvo: NO] [Texto: "1"]
+[15/05/2025 - 01-01] Erro não tratado: require(...).registrarLog is not a function
+[15/05/2025 - 01-01] [MENSAGEM RECEBIDA] De: 5511948944452@c.us [Contato salvo: NO] [Texto: "3"]
+[15/05/2025 - 01-01] Erro não tratado: require(...).registrarLog is not a function
+[15/05/2025 - 01-01] [MENSAGEM RECEBIDA] De: 5511948944452@c.us [Contato salvo: NO] [Texto: "1"]
+[15/05/2025 - 01-01] Erro não tratado: require(...).registrarLog is not a function
+[15/05/2025 - 01-01] [MENSAGEM RECEBIDA] De: 5511948944452@c.us [Contato salvo: NO] [Texto: "cheguei"]
