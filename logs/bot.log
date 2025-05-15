@@ -23,3 +23,12 @@
 [15/05/2025 - 01-01] [MENSAGEM RECEBIDA] De: 5511948944452@c.us [Contato salvo: NO] [Texto: "1"]
 [15/05/2025 - 01-01] Erro não tratado: require(...).registrarLog is not a function
 [15/05/2025 - 01-01] [MENSAGEM RECEBIDA] De: 5511948944452@c.us [Contato salvo: NO] [Texto: "cheguei"]
+[15/05/2025 - 01-04] [MENSAGEM RECEBIDA] De: 5511948944452@c.us [Contato salvo: NO] [Texto: "ah sim sauve"]
+[15/05/2025 - 01-04] [MENSAGEM RECEBIDA] De: 5511948944452@c.us [Contato salvo: NO] [Texto: "0"]
+[15/05/2025 - 01-04] [ERRO] Ao processar mensagem de 5511948944452@c.us: require(...).registrarLog is not a function
+[15/05/2025 - 01-04] [MENSAGEM RECEBIDA] De: 5511948944452@c.us [Contato salvo: NO] [Texto: "2"]
+[15/05/2025 - 01-04] Erro não tratado: require(...).registrarLog is not a function
+[15/05/2025 - 01-06] PROBLEMA DETECTADO: Bot recebendo mensagens mas não respondendo.
+[15/05/2025 - 01-06] Realizando reinício suave do bot
+[15/05/2025 - 01-06] Reinício suave concluído com sucesso
+[15/05/2025 - 01-06] Reinício automático bem sucedido
