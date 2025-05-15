@@ -235,11 +235,236 @@ async function migrarDoJSON(jsonPath) {
   }
 }
 
+/**
+ * Obter uma sessão do Supabase pelo número
+ * @param {string} numero - Número do WhatsApp com sufixo @c.us
+ * @returns {Promise<Object|null>} Dados da sessão ou null
+ */
+async function getSessaoByNumero(numero) {
+  try {
+    const { data, error } = await supabase
+      .from('sessoes')
+      .select('*')
+      .eq('numero', numero)
+      .single();
+      
+    if (error) {
+      // Se for erro de 'não encontrado', retorna null silenciosamente
+      if (error.code === 'PGRST116') return null;
+      
+      console.error('Erro ao buscar sessão:', error);
+      return null;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error(`Erro ao buscar sessão ${numero}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Salvar ou atualizar uma sessão no Supabase
+ * @param {string} numero - Número do WhatsApp com sufixo @c.us
+ * @param {Object} sessao - Dados da sessão
+ * @returns {Promise<boolean>} Sucesso da operação
+ */
+async function salvarSessao(numero, sessao) {
+  try {
+    const { error } = await supabase
+      .from('sessoes')
+      .upsert({
+        numero,
+        step: sessao.step || 'menu',
+        timestamp: sessao.timestamp ? new Date(sessao.timestamp).toISOString() : new Date().toISOString(),
+        invalidCount: sessao.invalidCount || 0,
+        naoNumericaConsecutivas: sessao.naoNumericaConsecutivas || 0,
+        planoSelecionado: sessao.planoSelecionado || null,
+        valorPlano: sessao.valorPlano || null,
+        metodoPagamento: sessao.metodoPagamento || null,
+        ultima_atualizacao: new Date().toISOString()
+      }, {
+        onConflict: 'numero'
+      });
+      
+    return !error;
+  } catch (error) {
+    console.error(`Erro ao salvar sessão ${numero}:`, error);
+    return false;
+  }
+}
+
+/**
+ * Carregar todas as sessões do Supabase
+ * @returns {Promise<Map>} Mapa de sessões
+ */
+async function carregarSessoes() {
+  try {
+    const { data, error } = await supabase
+      .from('sessoes')
+      .select('*');
+      
+    if (error) {
+      console.error('Erro ao carregar sessões:', error);
+      return new Map();
+    }
+    
+    const sessions = new Map();
+    
+    for (const sessao of data) {
+      sessions.set(sessao.numero, {
+        step: sessao.step || 'menu',
+        timestamp: new Date(sessao.timestamp).getTime(),
+        invalidCount: sessao.invalidCount || 0,
+        naoNumericaConsecutivas: sessao.naoNumericaConsecutivas || 0,
+        planoSelecionado: sessao.planoSelecionado,
+        valorPlano: sessao.valorPlano,
+        metodoPagamento: sessao.metodoPagamento
+      });
+    }
+    
+    console.log(`${sessions.size} sessões carregadas do Supabase`);
+    return sessions;
+  } catch (error) {
+    console.error('Erro ao carregar sessões do Supabase:', error);
+    return new Map();
+  }
+}
+
+/**
+ * Remover uma sessão do Supabase
+ * @param {string} numero - Número do WhatsApp
+ * @returns {Promise<boolean>} Sucesso da operação
+ */
+async function removerSessao(numero) {
+  try {
+    const { error } = await supabase
+      .from('sessoes')
+      .delete()
+      .eq('numero', numero);
+      
+    return !error;
+  } catch (error) {
+    console.error(`Erro ao remover sessão ${numero}:`, error);
+    return false;
+  }
+}
+
+/**
+ * Registrar log no Supabase
+ * @param {string} nivel - Nível do log (INFO, WARN, ERROR)
+ * @param {string} mensagem - Mensagem de log
+ * @param {string} origem - Origem do log (função ou módulo)
+ * @param {string} numero - Número do WhatsApp relacionado (opcional)
+ * @returns {Promise<boolean>} Sucesso da operação
+ */
+async function registrarLog(nivel, mensagem, origem = null, numero = null) {
+  try {
+    // Ainda manter o log no console para debug
+    const agora = new Date();
+    const dataHoraFormatada = `[${agora.toLocaleDateString("pt-BR")} - ${agora.toLocaleTimeString("pt-BR")}]`;
+    console.log(`${dataHoraFormatada} [${nivel}] ${mensagem}`);
+    
+    // Inserir no Supabase
+    const { error } = await supabase
+      .from('logs')
+      .insert([{
+        nivel,
+        mensagem,
+        origem,
+        numero,
+        data_hora: agora.toISOString()
+      }]);
+      
+    if (error) {
+      // Se falhar, não deve interromper a execução do bot
+      console.error('Erro ao salvar log no Supabase:', error);
+      return false;
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Erro ao registrar log:', error);
+    return false;
+  }
+}
+
+/**
+ * Consultar logs por período
+ * @param {Date} dataInicio - Data inicial
+ * @param {Date} dataFim - Data final
+ * @param {string} nivel - Nível do log (opcional)
+ * @param {number} limite - Limite de registros
+ * @returns {Promise<Array>} Registros de log
+ */
+async function consultarLogs(dataInicio, dataFim, nivel = null, limite = 100) {
+  try {
+    let query = supabase
+      .from('logs')
+      .select('*')
+      .gte('data_hora', dataInicio.toISOString())
+      .lte('data_hora', dataFim.toISOString())
+      .order('data_hora', { ascending: false })
+      .limit(limite);
+      
+    if (nivel) {
+      query = query.eq('nivel', nivel);
+    }
+    
+    const { data, error } = await query;
+    
+    if (error) {
+      console.error('Erro ao consultar logs:', error);
+      return [];
+    }
+    
+    return data || [];
+  } catch (error) {
+    console.error('Erro ao consultar logs:', error);
+    return [];
+  }
+}
+
+/**
+ * Consultar logs por número de WhatsApp
+ * @param {string} numero - Número do WhatsApp
+ * @param {number} limite - Limite de registros
+ * @returns {Promise<Array>} Registros de log
+ */
+async function consultarLogsPorNumero(numero, limite = 50) {
+  try {
+    const { data, error } = await supabase
+      .from('logs')
+      .select('*')
+      .eq('numero', numero)
+      .order('data_hora', { ascending: false })
+      .limit(limite);
+      
+    if (error) {
+      console.error('Erro ao consultar logs por número:', error);
+      return [];
+    }
+    
+    return data || [];
+  } catch (error) {
+    console.error('Erro ao consultar logs por número:', error);
+    return [];
+  }
+}
+
+
 module.exports = {
   inicializarSupabase,
   getAllIndicacoes,
   getIndicacoesByNumero,
   incrementIndicacao,
   ajustarIndicacao,
-  migrarDoJSON
+  migrarDoJSON,
+  getSessaoByNumero,
+  salvarSessao,
+  carregarSessoes,
+  removerSessao,
+  registrarLog,
+  consultarLogs,
+  consultarLogsPorNumero
 };

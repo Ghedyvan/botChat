@@ -26,13 +26,7 @@ async function isContactSaved(chatId) {
     const contact = await client.getContactById(chatId);
     
     // Verificar se o contato existe e está salvo
-    if (contact) {
-      // Log para depuração
-      console.log(`[DEBUG] Verificando contato ${chatId}: 
-        - Nome: ${contact.name || 'N/A'}
-        - PushName: ${contact.pushname || 'N/A'} 
-        - isMyContact: ${contact.isMyContact || false}`);
-      
+    if (contact) {      
       // Verificação mais confiável usando nome do contato ou isMyContact
       return contact.name !== undefined || 
              contact.isMyContact === true || 

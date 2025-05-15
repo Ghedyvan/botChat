@@ -5,8 +5,8 @@ const path = require("path");
 
 // Módulos internos
 const { obterJogosParaWhatsApp } = require("./scrapper.js");
-const { loadSessions, saveSessions } = require("./sessionHandler.js");
 const { isContactSaved, responderComLog } = require("./utils.js");
+const gerarTeste = require("./gerarTest");
 const config = require("./config.js");
 
 // Banco de dados
@@ -33,24 +33,17 @@ let ultimaAtividadeTempo = Date.now();
 let monitoramentoAtivo = true;
 const userSessions = new Map();
 
-// Carregar dados persistentes
 async function inicializarDados() {
-  // Inicializar conexão com Supabase
   await supabaseClient.inicializarSupabase();
+  const sessions = await supabaseClient.carregarSessoes();
+  userSessions.clear();
 
-  // Tentar migrar dados do JSON para o Supabase (apenas na primeira vez)
-  if (fs.existsSync(indicacoesFile)) {
-    await supabaseClient.migrarDoJSON(indicacoesFile);
+  for (const [id, userData] of sessions.entries()) {
+    userSessions.set(id, userData);
   }
-
-  // Carregar sessões (mantém como estava)
-  const sessions = loadSessions();
-  if (sessions && sessions.length > 0) {
-    sessions.forEach(([id, userData]) => {
-      userSessions.set(id, userData);
-    });
-    console.log(`${userSessions.size} sessões carregadas com sucesso.`);
-  }
+  console.log(
+    `${userSessions.size} sessões carregadas do Supabase com sucesso.`
+  );
 }
 
 // Salvar dados de indicações
@@ -60,7 +53,12 @@ function salvarIndicacoes() {
     return true;
   } catch (error) {
     console.error("Erro ao salvar indicações:", error);
-    registrarLog(`Erro ao salvar indicações: ${error.message}`);
+    registrarLogLocal(
+      `Erro ao salvar indicações: ${error.message}`,
+      "ERROR",
+      "salvarIndicacoes",
+      null
+    );
     return false;
   }
 }
@@ -89,14 +87,30 @@ function fazerBackupIndicacoes() {
 }
 
 // Logging
-function registrarLog(mensagem) {
-  const agora = new Date();
-  const dataHora = `[${agora.toLocaleDateString("pt-BR")} - ${agora
-    .toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-    .replace(":", "-")}]`;
-  const logMensagem = `${dataHora} ${mensagem}\n`;
+async function registrarLogLocal(
+  mensagem,
+  nivel = "INFO",
+  origem = null,
+  numero = null
+) {
+  try {
+    // Ainda manter um log local para caso o Supabase esteja indisponível
+    const agora = new Date();
+    const dataHora = `[${agora.toLocaleDateString("pt-BR")} - ${agora
+      .toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+      .replace(":", "-")}]`;
+    const logMensagem = `${dataHora} [${nivel}] ${mensagem}\n`;
 
-  fs.appendFileSync(logFile, logMensagem, "utf8");
+    // Arquivo local como backup
+    fs.appendFileSync(logFile, logMensagem, "utf8");
+
+    // Enviar para o Supabase de forma assíncrona (não aguardar resposta)
+    supabaseClient
+      .registrarLog(nivel, mensagem, origem, numero)
+      .catch((err) => console.error("Erro ao enviar log para Supabase:", err));
+  } catch (error) {
+    console.error("Erro ao registrar log local:", error);
+  }
 }
 
 // Inicializar cliente WhatsApp
@@ -123,15 +137,38 @@ const client = new Client({
   },
 });
 
+async function salvarSessao(chatId, sessaoData) {
+  try {
+    // Atualiza a cópia em memória
+    userSessions.set(chatId, sessaoData);
+
+    // Salva no Supabase
+    await supabaseClient.salvarSessao(chatId, sessaoData);
+
+    // Log apenas para confirmar
+    console.log(`Sessão ${chatId} salva no Supabase`);
+    return true;
+  } catch (error) {
+    console.error(`Erro ao salvar sessão ${chatId}:`, error);
+    return false;
+  }
+}
+
 // Função para reinício suave
 async function reinicioSuave() {
   console.log("Realizando reinício suave do bot...");
-  registrarLog("Realizando reinício suave do bot");
+  registrarLogLocal(
+    "Realizando reinício suave do bot",
+    "INFO",
+    "reinicioSuave",
+    null
+  );
 
   try {
     // 1. Salvar sessões de usuários
-    saveSessions(userSessions);
-
+    for (const [chatId, sessao] of userSessions.entries()) {
+      await supabaseClient.salvarSessao(chatId, sessao);
+    }
     // 2. Resetar contadores e variáveis de estado
     mensagensRecebidas = 0;
     respostasEnviadas = 0;
@@ -171,11 +208,21 @@ async function reinicioSuave() {
     if (global.gc) global.gc();
 
     console.log("Reinício suave concluído com sucesso!");
-    registrarLog("Reinício suave concluído com sucesso");
+    registrarLogLocal(
+      "Reinício suave concluído com sucesso",
+      "INFO",
+      "reinicioSuave",
+      null
+    );
     return true;
   } catch (error) {
     console.error("Erro durante reinício suave:", error);
-    registrarLog(`Erro durante reinício suave: ${error.message}`);
+    registrarLogLocal(
+      `Erro durante reinício suave: ${error.message}`,
+      "ERROR",
+      "reinicioSuave",
+      null
+    );
     return false;
   }
 }
@@ -188,7 +235,12 @@ async function verificarEstadoConexao() {
 
     if (estado !== "CONNECTED") {
       console.log("Cliente não está conectado, tentando reconectar...");
-      registrarLog(`Cliente em estado ${estado}, tentando reconectar`);
+      registrarLogLocal(
+        `Cliente em estado ${estado}, tentando reconectar`,
+        "WARN",
+        "verificarEstadoConexao",
+        null
+      );
       client.initialize();
     }
 
@@ -196,19 +248,34 @@ async function verificarEstadoConexao() {
       const pages = await client.pupBrowser.pages().catch(() => null);
       if (!pages) {
         console.log("Navegador não está respondendo, tentando reiniciar...");
-        registrarLog("Navegador não está respondendo, tentando reiniciar");
+        registrarLogLocal(
+          "Navegador não está respondendo, tentando reiniciar",
+          "WARN",
+          "verificarEstadoConexao",
+          null
+        );
         await reinicioSuave();
       }
     }
   } catch (error) {
     console.error("Erro ao verificar estado da conexão:", error);
-    registrarLog(`Erro ao verificar estado da conexão: ${error.message}`);
+    registrarLogLocal(
+      `Erro ao verificar estado da conexão: ${error.message}`,
+      "ERROR",
+      "verificarEstadoConexao",
+      null
+    );
 
     if (error.message.includes("Execution context was destroyed")) {
       console.log(
         "Contexto destruído detectado em verificação de estado, reiniciando..."
       );
-      registrarLog("Contexto destruído detectado em verificação periódica");
+      registrarLogLocal(
+        "Contexto destruído detectado em verificação periódica",
+        "ERROR",
+        "verificarEstadoConexao",
+        null
+      );
       setTimeout(() => {
         client.initialize();
       }, 5000);
@@ -245,8 +312,11 @@ function monitorarSaudeBot() {
         console.error(
           "🔄 PROBLEMA DETECTADO: Bot recebendo mensagens mas não respondendo."
         );
-        registrarLog(
-          "PROBLEMA DETECTADO: Bot recebendo mensagens mas não respondendo."
+        registrarLogLocal(
+          "PROBLEMA DETECTADO: Bot recebendo mensagens mas não respondendo.",
+          "ERROR",
+          "monitorarSaudeBot",
+          null
         );
 
         // Evita reinícios múltiplos
@@ -256,10 +326,20 @@ function monitorarSaudeBot() {
         reinicioSuave().then((sucesso) => {
           if (sucesso) {
             console.log("Reinício automático bem sucedido!");
-            registrarLog("Reinício automático bem sucedido");
+            registrarLogLocal(
+              "Reinício automático bem sucedido",
+              "INFO",
+              "monitorarSaudeBot",
+              null
+            );
           } else {
             console.error("Reinício automático falhou");
-            registrarLog("Reinício automático falhou");
+            registrarLogLocal(
+              "Reinício automático falhou",
+              "ERROR",
+              "monitorarSaudeBot",
+              null
+            );
           }
 
           // Reativa o monitoramento após um tempo
@@ -281,18 +361,18 @@ client.on("qr", (qr) => {
 client.on("authenticated", () => {
   const mensagem = "Autenticado com sucesso!";
   console.log(mensagem);
-  registrarLog(mensagem);
+  registrarLogLocal(mensagem, "INFO", "clientAuth", null);
 });
 
 client.on("ready", () => {
   const mensagem = "Bot está pronto!";
   console.log(mensagem);
-  registrarLog(mensagem);
+  registrarLogLocal(mensagem, "INFO", "clientReady", null);
 
   // Iniciar monitoramento
   setInterval(monitorarSaudeBot, 60000); // Verificar a cada minuto
   setInterval(verificarEstadoConexao, 15 * 60 * 1000); // A cada 15 minutos
-
+  setInterval(salvarTodasSessoes, 5 * 60 * 1000); // A cada 5 minutos
   // Backup diário
   const agora = new Date();
   const proximaMeiaNoite = new Date(agora);
@@ -307,11 +387,21 @@ client.on("ready", () => {
 
 client.on("disconnected", async (reason) => {
   console.log("Cliente desconectado:", reason);
-  registrarLog(`Cliente desconectado: ${reason}`);
+  registrarLogLocal(
+    `Cliente desconectado: ${reason}`,
+    "WARN",
+    "clientEvent",
+    null
+  );
 
   setTimeout(() => {
     console.log("Tentando reconectar...");
-    registrarLog("Tentando reconectar após desconexão");
+    registrarLogLocal(
+      "Tentando reconectar após desconexão",
+      "INFO",
+      "clientEvent",
+      null
+    );
     client.initialize();
   }, 10000);
 });
@@ -325,18 +415,59 @@ async function handleMessage(msg) {
 
   // COMANDOS UNIVERSAIS (funcionam para todos)
   // =======================================
+  // Comando especial para gerar teste independentemente do tipo de contato
+  if (msg.body.toLowerCase() === "/tst") {
+    try {
+      console.log(`Gerando teste especial para ${chatId}`);
+
+      const novaSessao = {
+        step: "testeEspecial",
+        timestamp: Date.now(),
+        invalidCount: 0,
+      };
+      // Perguntar qual dispositivo o usuário está usando
+      await responderComLog(
+        msg,
+        "🔑 *Teste Especial Ativado*\n\n" +
+          "Escolha o tipo de dispositivo para gerar seu teste:\n\n" +
+          "1️⃣ Android/TV Box (IPTV Stream Player)\n" +
+          "2️⃣ iPhone/iPad (Smarters Player)\n" +
+          "3️⃣ Smart TV LG/Samsung/Roku (xCloud TV)"
+      );
+
+      await salvarSessao(chatId, novaSessao);
+
+      // Registrar o uso do comando especial
+      registrarLogLocal(
+        `Comando teste especial usado por: ${chatId}`,
+        "INFO",
+        "comandoTst",
+        chatId
+      );
+      return;
+    } catch (error) {
+      console.error(
+        `Erro ao processar comando de teste especial: ${error.message}`
+      );
+      await responderComLog(
+        msg,
+        "⚠️ Ocorreu um erro ao processar sua solicitação de teste."
+      );
+      return;
+    }
+  }
 
   // Comando para limpar sessão
   if (
     msg.body.toLowerCase() === "/clear" ||
     msg.body.toLowerCase() === "/reiniciar_conversa"
   ) {
-    userSessions.set(chatId, {
+    const novaSessao = {
       step: "menu",
       timestamp: Date.now(),
       invalidCount: 0,
-    });
-    saveSessions(userSessions);
+    };
+    await salvarSessao(chatId, novaSessao);
 
     await responderComLog(msg, "✅ Sua conversa foi reiniciada com sucesso!");
 
@@ -352,9 +483,28 @@ async function handleMessage(msg) {
     );
 
     console.log(`Sessão reiniciada para: ${chatId}`);
-    registrarLog(`Sessão reiniciada pelo usuário: ${chatId}`);
+    registrarLogLocal(
+      `Sessão reiniciada pelo usuário`,
+      "INFO",
+      "comandoClear",
+      chatId
+    );
 
     return;
+  }
+  // Salvar periodicamente todas as sessões
+  function salvarTodasSessoes() {
+    if (userSessions.size > 0) {
+      console.log(`Salvando ${userSessions.size} sessões no Supabase...`);
+
+      for (const [chatId, sessao] of userSessions.entries()) {
+        supabaseClient
+          .salvarSessao(chatId, sessao)
+          .catch((err) =>
+            console.error(`Erro ao salvar sessão ${chatId}:`, err)
+          );
+      }
+    }
   }
 
   // Comando para ver indicações
@@ -622,7 +772,7 @@ async function handleMessage(msg) {
         userSessions.clear();
 
         // Salvar sessões (agora vazias)
-        saveSessions(userSessions);
+        await salvarSessao(chatId, novaSessao);
 
         await responderComLog(
           msg,
@@ -675,8 +825,112 @@ async function handleMessage(msg) {
   // TRATAMENTO ESPECÍFICO PARA CONTATOS SALVOS
   // =========================================
   if (contatoSalvo) {
-    // Se for um contato salvo que não está na lista de comandos, não processamos mais nada
-    return;
+    // Verificar se o contato está em algum fluxo de comando especial
+    const session = userSessions.get(chatId);
+
+    // Se estiver em fluxos específicos, continuar o processamento mesmo sendo contato salvo
+    if (
+      session &&
+      (session.step === "testeEspecial" || session.step === "testeGerado")
+    ) {
+      if (session.step === "testeEspecial") {
+        // Processar escolha do dispositivo para teste especial
+        if (msg.body === "1") {
+          // Android/TV Box
+          console.log(
+            `Gerando teste iptvstream para ${msg.from} (teste especial)`
+          );
+          try {
+            await gerarTeste(msg, "iptvstream");
+            session.step = "testeAdmGerado";
+            await salvarSessao(msg.from, session);
+          } catch (error) {
+            console.error(
+              `Erro ao gerar teste especial iptvstream: ${error.message}`
+            );
+            await responderComLog(
+              msg,
+              "⚠️ Não foi possível gerar seu teste. Por favor, tente novamente mais tarde."
+            );
+            session.invalidCount = (session.invalidCount || 0) + 1;
+            if (session.invalidCount >= 3) {
+              session.step = "menu"; // Volta ao menu após 3 tentativas
+            }
+            await salvarSessao(msg.from, session);
+          }
+        } else if (msg.body === "2") {
+          // iPhone/iPad
+          console.log(
+            `Gerando teste smarters para ${msg.from} (teste especial)`
+          );
+          try {
+            // Gera teste para Smarters Player
+            await gerarTeste(msg, "smarters");
+            session.step = "testeAdmGerado";
+            await salvarSessao(msg.from, session);
+          } catch (error) {
+            console.error(
+              `Erro ao gerar teste especial smarters: ${error.message}`
+            );
+            await responderComLog(
+              msg,
+              "⚠️ Não foi possível gerar seu teste. Por favor, tente novamente mais tarde."
+            );
+
+            session.invalidCount = (session.invalidCount || 0) + 1;
+            if (session.invalidCount >= 3) {
+              session.step = "menu"; // Volta ao menu após 3 tentativas
+            }
+            await salvarSessao(msg.from, session);
+          }
+        } else if (msg.body === "3") {
+          // Smart TV
+          console.log(`Gerando teste xcloud para ${msg.from} (teste especial)`);
+          try {
+            // Gera teste para xCloud TV
+            await gerarTeste(msg, "xcloud");
+            session.step = "testeAdmGerado";
+            await salvarSessao(msg.from, session);
+          } catch (error) {
+            console.error(
+              `Erro ao gerar teste especial xcloud: ${error.message}`
+            );
+            await responderComLog(
+              msg,
+              "⚠️ Não foi possível gerar seu teste. Por favor, tente novamente mais tarde."
+            );
+
+            // Mantém no modo de teste para tentar novamente
+            session.invalidCount = (session.invalidCount || 0) + 1;
+            if (session.invalidCount >= 3) {
+              session.step = "menu"; // Volta ao menu após 3 tentativas
+            }
+            await salvarSessao(msg.from, session);
+          }
+        } else {
+          // Opção inválida
+          session.invalidCount = (session.invalidCount || 0) + 1;
+          if (session.invalidCount < 3) {
+            await responderComLog(
+              msg,
+              "Por favor, escolha uma opção válida:\n\n" +
+                "1️⃣ Android/TV Box (IPTV Stream Player)\n" +
+                "2️⃣ iPhone/iPad (Smarters Player)\n" +
+                "3️⃣ Smart TV LG/Samsung/Roku (xCloud TV)"
+            );
+          } else {
+            session.step = "menu";
+            await salvarSessao(msg.from, session);
+            await responderComLog(
+              msg,
+              "⚠️ Muitas opções inválidas. Voltando ao menu principal.\n\n"
+            );
+          }
+        }
+      }
+    } else {
+      return;
+    }
   }
 
   // FLUXO NORMAL DO BOT (apenas para contatos não salvos)
@@ -699,8 +953,8 @@ async function handleMessage(msg) {
     !userSessions.has(chatId) ||
     now - userSessions.get(chatId).timestamp > sessionTimeout
   ) {
-    userSessions.set(chatId, { step: "menu", timestamp: now, invalidCount: 0 });
-    saveSessions(userSessions);
+    const novaSessao = { step: "menu", timestamp: now, invalidCount: 0 };
+    await salvarSessao(chatId, novaSessao);
 
     await responderComLog(
       msg,
@@ -731,13 +985,17 @@ async function handleMessage(msg) {
     if (session.naoNumericaConsecutivas >= 3 && session.step !== "humano") {
       session.step = "humano";
       session.invalidCount = 0;
+      await salvarSessao(msg.from, session);
       await responderComLog(
         msg,
         "Percebi que você está tentando conversar. Ativei o modo de atendimento humano. Um atendente responderá sua mensagem assim que possível."
       );
       console.log(`Atendimento humano ativado automaticamente para: ${chatId}`);
-      registrarLog(
-        `Atendimento humano ativado automaticamente para: ${chatId}`
+      registrarLogLocal(
+        `Atendimento humano ativado automaticamente`,
+        "INFO",
+        "handleMessage",
+        chatId
       );
       return;
     }
@@ -750,6 +1008,7 @@ async function handleMessage(msg) {
   if (msg.body === "0") {
     session.step = "menuRecovery";
     session.invalidCount = 0;
+    await salvarSessao(msg.from, session);
     await responderComLog(
       msg,
       "Bem vindo de volta ao menu\n\n" +
@@ -762,7 +1021,6 @@ async function handleMessage(msg) {
     return;
   }
 
-  // Impede processamento se tiver muitas mensagens inválidas
   if (session.invalidCount >= 3) return;
 
   // Menu inicial
@@ -773,11 +1031,39 @@ async function handleMessage(msg) {
     // Processamento da etapa de teste
     processarTestar(msg, session);
   } else if (session.step === "celular") {
-    // Processamento da etapa de celular
     processarCelular(msg, session);
   } else if (session.step === "smarttv") {
-    // Processamento da etapa de smart TV
     processarSmartTV(msg, session);
+  } else if (
+    ((session.step === "lg" ||
+      session.step === "samsung" ||
+      session.step === "roku") &&
+      (msg.body === "1" ||
+        msg.body.toLowerCase().includes("já instalei") ||
+        msg.body.toLowerCase().includes("instalei o app"))) ||
+    msg.body.toLowerCase().includes("instalei")
+  ) {
+    await gerarTeste(msg, "xcloud");
+    session.step = "testeGerado";
+    await salvarSessao(msg.from, session);
+  } else if (
+    session.step === "android" &&
+    (msg.body === "1" ||
+      msg.body.toLowerCase().includes("cheguei") ||
+      msg.body.toLowerCase().includes("tela de login"))
+  ) {
+    await gerarTeste(msg, "iptvstream");
+    session.step = "testeGerado";
+    await salvarSessao(msg.from, session);
+  } else if (
+    session.step === "iphone" &&
+    (msg.body === "1" ||
+      msg.body.toLowerCase().includes("cheguei") ||
+      msg.body.toLowerCase().includes("tela de login"))
+  ) {
+    await gerarTeste(msg, "smarters");
+    session.step = "testeGerado";
+    await salvarSessao(msg.from, session);
   } else if (session.step === "planos") {
     // Processamento da etapa de planos
     processarPlanos(msg, session);
@@ -797,6 +1083,7 @@ async function handleMessage(msg) {
       session.step = "menuRecovery";
       session.naoNumericaConsecutivas = 0;
       session.invalidCount = 0;
+      await salvarSessao(msg.from, session);
       await responderComLog(
         msg,
         "Voltando ao menu automático\n\n" +
@@ -809,6 +1096,50 @@ async function handleMessage(msg) {
       return;
     }
     // Não responder outras mensagens no modo humano
+  } else if (session.step === "testeGerado") {
+    // Processamento do feedback
+    if (msg.body === "1") {
+      // Usuário confirma que está funcionando
+      await responderComLog(
+        msg,
+        "🎉 Ótimo! Ficamos felizes que está tudo funcionando! Lembre-se que este é um teste de 3 horas.\n\n" +
+          "Caso queira contratar após o teste, digite /planos para conhecer nossas opções.\n\n" +
+          "0️⃣ Menu inicial"
+      );
+      session.step = "menuRecovery"; // Volta para o menu
+      await salvarSessao(msg.from, session);
+    } else if (msg.body === "2") {
+      // Usuário relata problemas
+      session.step = "humano"; // Encaminha para atendimento humano
+      await salvarSessao(msg.from, session);
+      await responderComLog(
+        msg,
+        "Entendi que está tendo dificuldades. Vou transferir para um atendente humano que irá te ajudar em seguida.\n\n" +
+          "Por favor, descreva o problema que está enfrentando detalhadamente para que possamos resolver mais rapidamente."
+      );
+    } else if (msg.body === "0") {
+      // Volta ao menu inicial
+      session.step = "menuRecovery";
+      await salvarSessao(msg.from, session);
+      await responderComLog(
+        msg,
+        "Voltando ao menu principal\n\n" +
+          "1️⃣ Conhecer nossos planos de IPTV\n" +
+          "2️⃣ Testar o serviço gratuitamente\n" +
+          "3️⃣ Saber mais sobre como funciona o IPTV\n" +
+          "4️⃣ Já testei e quero ativar\n" +
+          "5️⃣ Falar com um atendente"
+      );
+    } else {
+      // Mensagem inválida
+      await responderComLog(
+        msg,
+        "Por favor, escolha uma das opções:\n\n" +
+          "1️⃣ Sim, está funcionando\n" +
+          "2️⃣ Estou com problemas\n" +
+          "0️⃣ Menu inicial"
+      );
+    }
   }
 }
 
@@ -819,6 +1150,8 @@ async function processarMenuPrincipal(msg, session) {
   if (msg.body === "1") {
     session.step = "planos";
     session.invalidCount = 0;
+    await salvarSessao(msg.from, session);
+    await salvarSessao(msg.from, session);
     await client.sendMessage(msg.from, tabelaprecos, {
       caption:
         "📌 Escolha o que deseja fazer agora:\n\n" +
@@ -830,6 +1163,7 @@ async function processarMenuPrincipal(msg, session) {
   } else if (msg.body === "2") {
     session.step = "testar";
     session.invalidCount = 0;
+    await salvarSessao(msg.from, session);
     await responderComLog(
       msg,
       "Em qual dispositivo gostaria de realizar o teste?\n\n1️⃣ Celular\n2️⃣ TV Box\n3️⃣ Smart TV\n4️⃣ Computador\n\n0️⃣ Menu inicial"
@@ -837,6 +1171,7 @@ async function processarMenuPrincipal(msg, session) {
   } else if (msg.body === "3") {
     session.step = "comoFunciona";
     session.invalidCount = 0;
+    await salvarSessao(msg.from, session);
     await responderComLog(
       msg,
       "O IPTV é um serviço de streaming que permite assistir a canais de TV ao vivo, filmes, séries e novelas pela internet. Você pode acessar uma variedade de canais e programas em diferentes dispositivos, como TVs, smartphones e computadores.\n\n" +
@@ -845,6 +1180,7 @@ async function processarMenuPrincipal(msg, session) {
   } else if (msg.body === "4") {
     session.step = "ativar";
     session.invalidCount = 0;
+    await salvarSessao(msg.from, session);
     await client.sendMessage(msg.from, tabelaprecos, {
       caption:
         "📌 Escolha o plano que deseja:\n\n" +
@@ -857,6 +1193,7 @@ async function processarMenuPrincipal(msg, session) {
   } else if (msg.body === "5") {
     session.step = "humano";
     session.invalidCount = 0;
+    await salvarSessao(msg.from, session);
     await responderComLog(
       msg,
       "Digite abaixo o que deseja, um atendente humano irá responder suas mensagens o mais rápido possível 😊"
@@ -883,23 +1220,28 @@ async function processarTestar(msg, session) {
   if (msg.body === "1" || msg.body.toLowerCase().includes("celular")) {
     session.step = "celular";
     session.invalidCount = 0;
+    await salvarSessao(msg.from, session);
     await responderComLog(
       msg,
       "Seu celular é:\n\n1️⃣ Android\n2️⃣ iPhone\n\n0️⃣ Menu inicial"
     );
   } else if (msg.body === "2" || msg.body.toLowerCase().includes("tvbox")) {
-    session.step = "tvbox";
+    session.step = "android";
     session.invalidCount = 0;
+    await salvarSessao(msg.from, session);
     await client.sendMessage(msg.from, iptvstreamplayer, {
       caption:
         "✅ Siga os passos abaixo para configurar:\n\n" +
-        "📲 Procura na PlayStore e baixa um aplicativo chamado *IPTV STREAM PLAYER*.\n\n" +
+        "📲 Procura na PlayStore e baixa um aplicativo chamado IPTV STREAM PLAYER.\n\n" +
         "📌 Depois, pode abrir, irá aparecer uma tela com 3 botões, você seleciona o primeiro e ele irá te direcionar à página onde pede os dados de login.\n" +
-        "🚀 Quando chegar nessa tela, me informe.",
+        "🚀 Quando chegar na tela de login, me avise que te envio seus dados!\n\n" +
+        "1️⃣ Cheguei na tela de login\n" +
+        "0️⃣ Menu inicial",
     });
   } else if (msg.body === "3" || msg.body.toLowerCase().includes("smarttv")) {
     session.step = "smarttv";
     session.invalidCount = 0;
+    await salvarSessao(msg.from, session);
     await responderComLog(
       msg,
       "Qual a marca da sua TV?\n\n1️⃣ LG\n2️⃣ Samsung\n3️⃣ Outra com Android\n4️⃣ Outra com Roku\n5️⃣ Não sei se é Roku ou Android\n\n0️⃣ Menu inicial"
@@ -910,6 +1252,7 @@ async function processarTestar(msg, session) {
   ) {
     session.step = "computador";
     session.invalidCount = 0;
+    await salvarSessao(msg.from, session);
     await responderComLog(
       msg,
       "🌐 No seu computador, acesse o site: applime.cc\n\n" +
@@ -931,23 +1274,28 @@ async function processarCelular(msg, session) {
   if (msg.body === "1") {
     session.step = "android";
     session.invalidCount = 0;
+    await salvarSessao(msg.from, session);
     await client.sendMessage(msg.from, iptvstreamplayer, {
       caption:
         "✅ Siga os passos abaixo para configurar:\n\n" +
-        "📲 Procura na PlayStore e baixa um aplicativo chamado *IPTV STREAM PLAYER*.\n\n" +
+        "📲 Procura na PlayStore e baixa um aplicativo chamado IPTV STREAM PLAYER.\n\n" +
         "📌 Depois, pode abrir, irá aparecer uma tela com 3 botões, você seleciona o primeiro e ele irá te direcionar à página onde pede os dados de login.\n" +
-        "🚀 Quando chegar nessa tela, me informe.",
+        "🚀 Quando chegar na tela de login, me avise que te envio seus dados!\n\n" +
+        "1️⃣ Cheguei na tela de login\n" +
+        "0️⃣ Menu inicial",
     });
   } else if (msg.body === "2") {
     session.step = "iphone";
     session.invalidCount = 0;
+    await salvarSessao(msg.from, session);
     await responderComLog(
       msg,
       "✅ Siga os passos abaixo para configurar:\n\n" +
-        "1. Baixe o *Smarters Player Lite* na AppStore\n" +
-        "2. Abra o app e aceite os termos (Se ele pedir)\n" +
-        "3. Selecione *Xtreme Codes* na tela\n\n" +
-        "🔑 Quando chegar na tela de login, me avise que te envio seus dados!"
+        "📲 Baixe o *Smarters Player Lite* na AppStore\n" +
+        "📌 Abra o app e aceite os termos (Se ele pedir)\n" +
+        "🚀 Selecione *Xtreme Codes* na tela\n\n" +
+        "1️⃣ Cheguei na tela de login\n" +
+        "0️⃣ Menu inicial"
     );
   } else {
     session.invalidCount = (session.invalidCount || 0) + 1;
@@ -965,61 +1313,66 @@ async function processarSmartTV(msg, session) {
   if (msg.body === "1") {
     session.step = "lg";
     session.invalidCount = 0;
+    await salvarSessao(msg.from, session);
     await responderComLog(
       msg,
       "✅ Siga os passos abaixo para configurar:\n\n" +
-        "▸ Abra a loja de apps da TV (*APP* ou *LG Content Store*)\n" +
-        "▸ Instale o *IPTVSmartersPRO*\n" +
-        "▸ Abra o app > aceite os termos\n\n" +
-        "📩 Quando chegar na tela de login, me avise que te envio seus dados!"
+        "📺 Abra a loja de aplicativos da sua TV.\n" +
+        "🔍 Procure e instale o aplicativo xCloud TV.\n" +
+        "📌 Depois de instalar, abra o app e me avise pra eu te enviar os dados de acesso.\n" +
+        "⚠️ Obs: Se não encontrar o xCloud TV, me avise que te ajudo a baixar outro app.\n\n" +
+        "1️⃣ Já instalei e abri o app\n" +
+        "0️⃣ Menu inicial"
     );
   } else if (msg.body === "2") {
     session.step = "samsung";
     session.invalidCount = 0;
+    await salvarSessao(msg.from, session);
     await responderComLog(
       msg,
       "✅ Siga os passos abaixo para configurar:\n\n" +
-        "1️⃣ *Abra* a loja de aplicativos da sua TV\n" +
-        "2️⃣ *Procure* pelo aplicativo *xCloud TV* e instale\n" +
-        "3️⃣ *Abra* o aplicativo e me informe para eu te enviar os dados de acesso\n\n" +
-        "⚠️ *Obs:* Se não encontrar o xCloud TV, me avise que te ajudo a baixar outro app."
+        "📺 Abra a loja de aplicativos da sua TV.\n" +
+        "🔍 Procure e instale o aplicativo xCloud TV.\n" +
+        "📌 Depois de instalar, abra o app e me avise pra eu te enviar os dados de acesso.\n" +
+        "⚠️ Obs: Se não encontrar o xCloud TV, me avise que te ajudo a baixar outro app.\n\n" +
+        "1️⃣ Já instalei e abri o app\n" +
+        "0️⃣ Menu inicial"
     );
   } else if (msg.body === "3") {
     session.step = "android";
     session.invalidCount = 0;
+    await salvarSessao(msg.from, session);
     await client.sendMessage(msg.from, iptvstreamplayer, {
       caption:
         "✅ Siga os passos abaixo para configurar:\n\n" +
-        "📲 Procura na PlayStore e baixa um aplicativo chamado *IPTV STREAM PLAYER*.\n\n" +
-        "📌 Depois, pode abrir, irá aparecer uma tela com 3 botões, você seleciona *LOGIN WITH NEW USER ACCOUNT* e ele irá te direcionar à página onde pede os dados de login.\n" +
-        "🚀 Quando chegar nessa tela, me informe para eu te enviar os dados.",
+        "📲 Procura na PlayStore e baixa um aplicativo chamado IPTV STREAM PLAYER.\n\n" +
+        "📌 Depois, pode abrir, irá aparecer uma tela com 3 botões, você seleciona o primeiro e ele irá te direcionar à página onde pede os dados de login.\n" +
+        "🚀 Quando chegar na tela de login, me avise que te envio seus dados!\n\n" +
+        "1️⃣ Cheguei na tela de login\n" +
+        "0️⃣ Menu inicial",
     });
   } else if (msg.body === "4") {
     session.step = "roku";
     session.invalidCount = 0;
+    await salvarSessao(msg.from, session);
     await responderComLog(
       msg,
       "✅ Siga os passos abaixo para configurar:\n\n" +
-        "1️⃣ *Abra* a loja de aplicativos da sua TV\n" +
-        "2️⃣ *Procure* pelo aplicativo *xCloud TV* e instale\n" +
-        "3️⃣ *Abra* o aplicativo e me informe para eu te enviar os dados de acesso\n\n" +
-        "⚠️ *Obs:* _Se não encontrar o xCloud TV, me avise que te ajudo a baixar outro app._"
+        "📺 Abra a loja de aplicativos da sua TV.\n" +
+        "🔍 Procure e instale o aplicativo xCloud TV.\n" +
+        "📌 Depois de instalar, abra o app e me avise pra eu te enviar os dados de acesso.\n" +
+        "⚠️ Obs: Se não encontrar o xCloud TV, me avise que te ajudo a baixar outro app.\n\n" +
+        "1️⃣ Já instalei e abri o app\n" +
+        "0️⃣ Menu inicial"
     );
   } else if (msg.body === "5") {
     session.step = "outro";
     session.invalidCount = 0;
+    await salvarSessao(msg.from, session);
     await responderComLog(
       msg,
       "📱 Abre a loja de aplicativos e me manda uma foto da tela, por favor!"
     );
-  } else {
-    session.invalidCount = (session.invalidCount || 0) + 1;
-    if (session.invalidCount < 3) {
-      await responderComLog(
-        msg,
-        "Qual a marca da sua TV?\n\n1️⃣ LG\n2️⃣ Samsung\n3️⃣ Outra com Android\n4️⃣ Outra com Roku\n5️⃣ Não sei se é Roku ou Android\n\n0️⃣ Menu inicial"
-      );
-    }
   }
 }
 
@@ -1028,6 +1381,7 @@ async function processarPlanos(msg, session) {
   if (msg.body === "1") {
     session.step = "testar";
     session.invalidCount = 0;
+    await salvarSessao(msg.from, session);
     await responderComLog(
       msg,
       "Em qual dispositivo gostaria de realizar o teste?\n\n1️⃣ Celular\n2️⃣ TV Box\n3️⃣ Smart TV\n4️⃣ Computador\n\n0️⃣ Menu inicial"
@@ -1035,6 +1389,7 @@ async function processarPlanos(msg, session) {
   } else if (msg.body === "2") {
     session.step = "ativar";
     session.invalidCount = 0;
+    await salvarSessao(msg.from, session);
     await responderComLog(
       msg,
       "📌 Escolha o plano que deseja:\n\n" +
@@ -1047,6 +1402,7 @@ async function processarPlanos(msg, session) {
   } else if (msg.body === "3") {
     session.step = "comoFunciona";
     session.invalidCount = 0;
+    await salvarSessao(msg.from, session);
     await responderComLog(
       msg,
       "O IPTV é um serviço de streaming que permite assistir a canais de TV ao vivo, filmes, séries e novelas pela internet. Você pode acessar uma variedade de canais e programas em diferentes dispositivos, como TVs, smartphones e computadores.\n\n" +
@@ -1185,7 +1541,7 @@ client.on("message", async (msg) => {
   // Log de mensagem recebida
   const logMensagem = `[MENSAGEM RECEBIDA] De: ${msg.from} [${statusContato}]`;
   console.log(logMensagem);
-  registrarLog(logMensagem);
+  registrarLogLocal(logMensagem, "INFO", "messageReceived", chatId);
 
   // Atualizar timestamp de última atividade
   ultimaAtividadeTempo = Date.now();
@@ -1204,7 +1560,7 @@ client.on("message", async (msg) => {
   } catch (error) {
     const erroMensagem = `[ERRO] Ao processar mensagem de ${msg.from}: ${error.message}`;
     console.error(erroMensagem);
-    registrarLog(erroMensagem);
+    registrarLogLocal(erroMensagem, "ERROR", "messageHandler", chatId);
   }
 });
 
@@ -1218,20 +1574,33 @@ process.on("unhandledRejection", (reason, promise) => {
     console.log(
       "⚠️ Detectado erro de contexto destruído! Tentando recuperar..."
     );
-    registrarLog("Erro de contexto destruído detectado, iniciando recuperação");
+    registrarLogLocal(
+      "Erro de contexto destruído detectado, iniciando recuperação",
+      "WARN",
+      "unhandledRejection",
+      null
+    );
 
     setTimeout(() => {
       reinicioSuave().catch((err) => {
         console.error("Falha no reinício suave após erro de contexto:", err);
-        registrarLog(
-          `Falha no reinício suave após erro de contexto: ${err.message}`
+        registrarLogLocal(
+          `Falha no reinício suave após erro de contexto: ${err.message}`,
+          "ERROR",
+          "unhandledRejection",
+          null
         );
         client.initialize();
       });
     }, 5000);
   } else {
     console.error("Unhandled Rejection:", reason);
-    registrarLog(`Erro não tratado: ${reason?.message || reason}`);
+    registrarLogLocal(
+      `Erro não tratado: ${reason?.message || reason}`,
+      "ERROR",
+      "unhandledRejection",
+      null
+    );
   }
 });
 
@@ -1256,7 +1625,12 @@ process.on("unhandledRejection", (reason, promise) => {
     console.log("Inicialização concluída!");
   } catch (error) {
     console.error("Erro durante inicialização:", error);
-    registrarLog(`Erro durante inicialização: ${error.message}`);
+    registrarLogLocal(
+      `Erro durante inicialização: ${error.message}`,
+      "ERROR",
+      "inicializar",
+      null
+    );
   }
 })();
 

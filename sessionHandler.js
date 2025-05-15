@@ -1,7 +1,7 @@
-const fs = require('fs');
-const path = require('path');
+const fs = require("fs");
+const path = require("path");
 
-const SESSION_FILE = path.join(__dirname, 'sessions.json');
+const SESSION_FILE = path.join(__dirname, "sessions.json");
 
 /**
  * Carrega as sessões do arquivo
@@ -10,12 +10,12 @@ const SESSION_FILE = path.join(__dirname, 'sessions.json');
 function loadSessions() {
   try {
     if (fs.existsSync(SESSION_FILE)) {
-      const data = fs.readFileSync(SESSION_FILE, 'utf8');
+      const data = fs.readFileSync(SESSION_FILE, "utf8");
       return JSON.parse(data);
     }
     return [];
   } catch (error) {
-    console.error('Erro ao carregar sessões:', error);
+    console.error("Erro ao carregar sessões:", error);
     return [];
   }
 }
@@ -29,15 +29,15 @@ function loadSessions() {
 function saveSessions(sessions, filePath = SESSION_FILE) {
   try {
     const data = JSON.stringify([...sessions]);
-    fs.writeFileSync(filePath, data, 'utf8');
+    fs.writeFileSync(filePath, data, "utf8");
     return true;
   } catch (error) {
-    console.error('Erro ao salvar sessões:', error);
+    console.error("Erro ao salvar sessões:", error);
     return false;
   }
 }
 
 module.exports = {
   loadSessions,
-  saveSessions
+  saveSessions,
 };
