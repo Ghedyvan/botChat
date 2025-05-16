@@ -2,7 +2,8 @@ const fs = require('fs');
 let ultimaAtividadeTempo = Date.now();
 
 function obterDataBrasilia() {
-  return new Date(new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }));
+  const dataUTC = new Date();
+  return new Date(dataUTC.getTime() - (dataUTC.getTimezoneOffset() + 180) * 60000);
 }
 
 function registrarLog(mensagem, logFile = "./logs/bot.log") {
