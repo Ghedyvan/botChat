@@ -452,6 +452,129 @@ async function consultarLogsPorNumero(numero, limite = 50) {
   }
 }
 
+/**
+ * Verificar se o usuário já fez teste e está bloqueado
+ * @param {string} numero - Número do WhatsApp com sufixo @c.us
+ * @returns {Promise<Object|null>} Dados do usuário ou null se nunca fez teste
+ */
+async function verificarTesteUsuario(numero) {
+  try {
+    const { data, error } = await supabase
+      .from('testes_usuarios')
+      .select('*')
+      .eq('numero', numero)
+      .single();
+      
+    if (error) {
+      // Se for erro de 'não encontrado', significa que nunca fez teste
+      if (error.code === 'PGRST116') return null;
+      console.error('Erro ao verificar teste de usuário:', error);
+      return null;
+    }
+    
+    return data;
+  } catch (error) {
+    console.error(`Erro ao verificar teste para ${numero}:`, error);
+    return null;
+  }
+}
+
+/**
+ * Registrar novo teste para usuário
+ * @param {string} numero - Número do WhatsApp
+ * @param {string} app - Aplicativo utilizado
+ * @param {string} dispositivo - Tipo de dispositivo
+ * @returns {Promise<boolean>} Sucesso da operação
+ */
+async function registrarTesteUsuario(numero, app, dispositivo) {
+  try {
+    // Verificar se já existe
+    const testeExistente = await verificarTesteUsuario(numero);
+    
+    if (testeExistente) {
+      // Atualizar registro existente
+      const { error } = await supabase
+        .from('testes_usuarios')
+        .update({
+          app_utilizado: app,
+          dispositivo: dispositivo,
+          quantidade_testes: testeExistente.quantidade_testes + 1,
+          data_teste: new Date().toISOString(),
+          ultima_atualizacao: new Date().toISOString()
+        })
+        .eq('numero', numero);
+        
+      return !error;
+    } else {
+      // Criar novo registro
+      const { error } = await supabase
+        .from('testes_usuarios')
+        .insert({
+          numero,
+          app_utilizado: app,
+          dispositivo: dispositivo,
+          quantidade_testes: 1,
+          data_desbloqueio: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 dias no futuro
+        });
+        
+      return !error;
+    }
+  } catch (error) {
+    console.error(`Erro ao registrar teste para ${numero}:`, error);
+    return false;
+  }
+}
+
+/**
+ * Verificar se usuário pode fazer teste
+ * @param {string} numero - Número do WhatsApp
+ * @returns {Promise<Object>} Resultado da verificação
+ */
+async function podeRealizarTeste(numero) {
+  try {
+    const teste = await verificarTesteUsuario(numero);
+    
+    // Nunca fez teste antes
+    if (!teste) {
+      return { 
+        permitido: true,
+        motivo: "Primeiro teste" 
+      };
+    }
+    
+    // Verificar se já passou o período de bloqueio (30 dias)
+    const agora = new Date();
+    const dataDesbloqueio = new Date(teste.data_desbloqueio);
+    
+    if (teste.bloqueado && agora < dataDesbloqueio) {
+      const diasRestantes = Math.ceil((dataDesbloqueio - agora) / (1000 * 60 * 60 * 24));
+      return {
+        permitido: false,
+        motivo: "Período de bloqueio",
+        diasRestantes,
+        dataDesbloqueio: teste.data_desbloqueio
+      };
+    }
+    
+    // Se já passou o período de bloqueio ou não está bloqueado
+    return { 
+      permitido: true, 
+      motivo: "Período de bloqueio encerrado",
+      testeAnterior: {
+        app: teste.app_utilizado,
+        dispositivo: teste.dispositivo,
+        quantidade: teste.quantidade_testes,
+        dataUltimoTeste: teste.data_teste
+      }
+    };
+  } catch (error) {
+    console.error(`Erro ao verificar disponibilidade de teste para ${numero}:`, error);
+    // Em caso de erro, permitir teste (melhor experiência para o usuário)
+    return { permitido: true, motivo: "Erro na verificação" };
+  }
+}
+
+
 
 module.exports = {
   inicializarSupabase,
@@ -466,5 +589,8 @@ module.exports = {
   removerSessao,
   registrarLog,
   consultarLogs,
-  consultarLogsPorNumero
+  consultarLogsPorNumero,
+  verificarTesteUsuario,
+  registrarTesteUsuario,
+  podeRealizarTeste
 };

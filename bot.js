@@ -28,7 +28,6 @@ let modoAusente = false;
 const avisosEnviados = new Set();
 let indicacoes = {};
 let mensagensRecebidas = 0;
-let respostasEnviadas = 0;
 let ultimaAtividadeTempo = Date.now();
 let monitoramentoAtivo = true;
 const userSessions = new Map();
