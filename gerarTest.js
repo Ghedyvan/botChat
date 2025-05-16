@@ -2,6 +2,9 @@ const axios = require("axios");
 const fs = require("fs");
 const supabaseClient = require('./supabase');
 
+// Registro de testes com timestamp para acompanhamento
+const testesPendentes = new Map();
+
 async function gerarTeste(msg, app) {
   try {
     console.log(`Tentando gerar teste para ${msg.from} com app ${app}...`);
@@ -46,7 +49,7 @@ async function gerarTeste(msg, app) {
       postData
     );
 
-    console.log(`Resposta da API recebida: ${JSON.stringify(response.data)}`);
+    // console.log(`Resposta da API recebida: ${JSON.stringify(response.data)}`);
 
     if (response.data) {
       const tempFilePath = "./temp_response.json";
@@ -101,13 +104,19 @@ async function gerarTeste(msg, app) {
           );
         }
         
-        // Após o teste, adicionar um lembrete sobre o tempo de bloqueio
-        setTimeout(async () => {
-          await msg.reply(
-            '⚠️ *Lembrete importante:* Após este teste gratuito, você só poderá solicitar outro após 30 dias. ' +
-            'Se gostar do serviço, recomendamos contratar um plano para acesso contínuo. Digite /planos para conhecer nossas opções.'
-          );
-        }, 15000); // 15 segundos após o envio das credenciais
+        // Registrar o teste nos pendentes para acompanhamento posterior
+        testesPendentes.set(userId, {
+          timestamp: Date.now(),
+          app: app,
+          dispositivo: dispositivo,
+          username: username,
+          respondido: false
+        });
+        
+        // Programar verificação após 2 horas
+        setTimeout(() => {
+          verificarAcompanhamentoTeste(userId, msg.reply.bind(msg));
+        }, 2 * 60 * 60 * 1000); // 2 horas em milissegundos
         
       } else {
         console.error("API não retornou credenciais");
@@ -130,4 +139,45 @@ async function gerarTeste(msg, app) {
   }
 }
 
-module.exports = gerarTeste;
+// Função para verificar se o usuário respondeu após o teste
+async function verificarAcompanhamentoTeste(userId, replyFunction) {
+  try {
+    // Verificar se o usuário ainda está no mapa e se não respondeu
+    const testePendente = testesPendentes.get(userId);
+    if (!testePendente || testePendente.respondido) {
+      console.log(`Teste de ${userId} já foi respondido ou não existe mais`);
+      return;
+    }
+    
+    // Se o usuário não respondeu, enviar mensagem de acompanhamento
+    console.log(`Enviando mensagem de acompanhamento para ${userId}`);
+    user.session = "fim";
+    const mensagem = 
+      `Olá! Seu acesso de teste vence em breve. Funcionou tudo bem?\n\n` +
+      `Se você gostou e deseja ativar um plano, é só digitar /planos para ver nossas opções! 😊\n\n` +
+      `_Se teve algum problema ou dúvida, me avise que posso te ajudar._ `
+    
+    await replyFunction(mensagem);
+    
+    // Remover do mapa após enviar a mensagem de acompanhamento
+    testesPendentes.delete(userId);
+    
+  } catch (error) {
+    console.error(`Erro ao enviar mensagem de acompanhamento para ${userId}:`, error);
+  }
+}
+
+// Função para marcar teste como respondido quando o usuário envia qualquer mensagem
+function marcarTesteRespondido(userId) {
+  if (testesPendentes.has(userId)) {
+    const teste = testesPendentes.get(userId);
+    teste.respondido = true;
+    testesPendentes.set(userId, teste);
+    console.log(`Teste de ${userId} marcado como respondido`);
+  }
+}
+
+module.exports = {
+  gerarTeste,
+  marcarTesteRespondido
+};
