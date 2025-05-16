@@ -2,8 +2,12 @@ const fs = require('fs');
 let ultimaAtividadeTempo = Date.now();
 
 function obterDataBrasilia() {
+  const fusoHorarioBrasiliaEmMinutos = -180; 
   const dataUTC = new Date();
-  return new Date(dataUTC.getTime() - (dataUTC.getTimezoneOffset() + 180) * 60000);
+  const offsetLocal = dataUTC.getTimezoneOffset();
+  const ajuste = fusoHorarioBrasiliaEmMinutos + offsetLocal;
+
+  return new Date(dataUTC.getTime() + ajuste * 60000);
 }
 
 function registrarLog(mensagem, logFile = "./logs/bot.log") {
