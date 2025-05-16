@@ -1576,10 +1576,12 @@ client.on("message", async (msg) => {
   const chatId = msg.from;
   const contatoSalvo = await isContactSaved(chatId);
   const statusContato = contatoSalvo ? "YES" : "NO";
+  const session = userSessions.get(chatId) || { step: "sem_sessao" };
+  const etapaAtual = session.step;
 
   // Log de mensagem recebida
   const logMensagem = `[MENSAGEM RECEBIDA] [${etapaAtual}] De: ${msg.from} [${statusContato}]`;
-  console.log(logMensagem);
+  //console.log(logMensagem);
   registrarLogLocal(logMensagem, "INFO", "messageReceived", chatId);
 
   // Atualizar timestamp de última atividade
