@@ -497,7 +497,9 @@ async function handleMessage(msg) {
 
   //Ver os planos disponíveis
   if(msg.body.toLowerCase() === "/planos") {
+    const session = userSessions.get(chatId) || { step: "fim", timestamp: Date.now(), invalidCount: 0 };
     session.step = "fim";
+    await salvarSessao(msg.from, session);
     global.respostasEnviadas++;
     await client.sendMessage(msg.from, tabelaprecos);
     return;
