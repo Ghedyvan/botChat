@@ -33,6 +33,9 @@ let ultimaAtividadeTempo = Date.now();
 let monitoramentoAtivo = true;
 const userSessions = new Map();
 
+// Exportar respostasEnviadas como global para acesso externo
+global.respostasEnviadas = 0;
+
 async function inicializarDados() {
   await supabaseClient.inicializarSupabase();
   const sessions = await supabaseClient.carregarSessoes();
@@ -157,6 +160,8 @@ async function salvarSessao(chatId, sessaoData) {
 // Função para reinício suave
 async function reinicioSuave() {
   console.log("Realizando reinício suave do bot...");
+  mensagensRecebidas = 0;
+  global.respostasEnviadas = 0; 
   registrarLogLocal(
     "Realizando reinício suave do bot",
     "INFO",
@@ -458,10 +463,7 @@ async function handleMessage(msg) {
   }
 
   // Comando para limpar sessão
-  if (
-    msg.body.toLowerCase() === "/clear" ||
-    msg.body.toLowerCase() === "/reiniciar_conversa"
-  ) {
+  if (msg.body.toLowerCase() === "/clear" || msg.body.toLowerCase() === "/reiniciar_conversa") {
     const novaSessao = {
       step: "menu",
       timestamp: Date.now(),
@@ -492,6 +494,15 @@ async function handleMessage(msg) {
 
     return;
   }
+
+  //Ver os planos disponíveis
+  if(msg.body.toLowerCase() === "/planos") {
+    session.step = "fim";
+    global.respostasEnviadas++;
+    await client.sendMessage(msg.from, tabelaprecos);
+    return;
+  }
+
   // Salvar periodicamente todas as sessões
   function salvarTodasSessoes() {
     if (userSessions.size > 0) {
@@ -1106,21 +1117,22 @@ async function handleMessage(msg) {
     // Processamento do feedback
     if (msg.body === "1") {
       // Usuário confirma que está funcionando
+      session.step = "fim";
       await responderComLog(
         msg,
         "🎉 Ótimo! Ficamos felizes que está tudo funcionando! Lembre-se que este é um teste de 3 horas.\n\n" +
           "Caso queira contratar após o teste, digite /planos para conhecer nossas opções.\n\n" +
           "0️⃣ Menu inicial"
       );
-      session.step = "menuRecovery"; // Volta para o menu
       await salvarSessao(msg.from, session);
+      return;
     } else if (msg.body === "2") {
       // Usuário relata problemas
       session.step = "humano"; // Encaminha para atendimento humano
       await salvarSessao(msg.from, session);
       await responderComLog(
         msg,
-        "Entendi que está tendo dificuldades. Vou transferir para um atendente humano que irá te ajudar em seguida.\n\n" +
+        "Vou transferir para um atendente humano que irá te ajudar em seguida.\n\n" +
           "Por favor, descreva o problema que está enfrentando detalhadamente para que possamos resolver mais rapidamente."
       );
     } else if (msg.body === "0") {
@@ -1157,7 +1169,7 @@ async function processarMenuPrincipal(msg, session) {
     session.step = "planos";
     session.invalidCount = 0;
     await salvarSessao(msg.from, session);
-    await salvarSessao(msg.from, session);
+    global.respostasEnviadas++;
     await client.sendMessage(msg.from, tabelaprecos, {
       caption:
         "📌 Escolha o que deseja fazer agora:\n\n" +
@@ -1187,6 +1199,7 @@ async function processarMenuPrincipal(msg, session) {
     session.step = "ativar";
     session.invalidCount = 0;
     await salvarSessao(msg.from, session);
+    global.respostasEnviadas++;
     await client.sendMessage(msg.from, tabelaprecos, {
       caption:
         "📌 Escolha o plano que deseja:\n\n" +
@@ -1235,6 +1248,7 @@ async function processarTestar(msg, session) {
     session.step = "android";
     session.invalidCount = 0;
     await salvarSessao(msg.from, session);
+    global.respostasEnviadas++;
     await client.sendMessage(msg.from, iptvstreamplayer, {
       caption:
         "✅ Siga os passos abaixo para configurar:\n\n" +
@@ -1281,6 +1295,7 @@ async function processarCelular(msg, session) {
     session.step = "android";
     session.invalidCount = 0;
     await salvarSessao(msg.from, session);
+    global.respostasEnviadas++;
     await client.sendMessage(msg.from, iptvstreamplayer, {
       caption:
         "✅ Siga os passos abaixo para configurar:\n\n" +
@@ -1348,6 +1363,7 @@ async function processarSmartTV(msg, session) {
     session.step = "android";
     session.invalidCount = 0;
     await salvarSessao(msg.from, session);
+    global.respostasEnviadas++;
     await client.sendMessage(msg.from, iptvstreamplayer, {
       caption:
         "✅ Siga os passos abaixo para configurar:\n\n" +

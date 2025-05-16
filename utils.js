@@ -1,5 +1,4 @@
 const fs = require('fs');
-let respostasEnviadas = 0;
 let ultimaAtividadeTempo = Date.now();
 
 // Log local para evitar importação circular
@@ -53,6 +52,7 @@ async function responderComLog(msg, texto) {
     await msg.reply(texto);
     respostasEnviadas++;
     ultimaAtividadeTempo = Date.now();
+    global.respostasEnviadas = (global.respostasEnviadas || 0) + 1;
 
     const textoResumido = texto.length > 50 ? `${texto.substring(0, 50)}...` : texto;
     const logResposta = `[RESPOSTA ENVIADA] Para: ${msg.from}`;
