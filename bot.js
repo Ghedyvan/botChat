@@ -1027,13 +1027,17 @@ async function handleMessage(msg) {
   if (session.step === "menu" || session.step === "menuRecovery") {
     // Processamento do menu principal
     processarMenuPrincipal(msg, session);
+    return;
   } else if (session.step === "testar") {
     // Processamento da etapa de teste
     processarTestar(msg, session);
+    return;
   } else if (session.step === "celular") {
     processarCelular(msg, session);
+    return;
   } else if (session.step === "smarttv") {
     processarSmartTV(msg, session);
+    return;
   } else if (
     ((session.step === "lg" ||
       session.step === "samsung" ||
@@ -1067,9 +1071,11 @@ async function handleMessage(msg) {
   } else if (session.step === "planos") {
     // Processamento da etapa de planos
     processarPlanos(msg, session);
+    return;
   } else if (session.step === "ativar") {
     // Processamento da etapa de ativação
     processarAtivar(msg, session);
+    return;
   } else if (
     session.step === "cinema" ||
     session.step === "completo" ||
