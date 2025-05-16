@@ -1578,7 +1578,7 @@ client.on("message", async (msg) => {
   const statusContato = contatoSalvo ? "YES" : "NO";
 
   // Log de mensagem recebida
-  const logMensagem = `[MENSAGEM RECEBIDA] De: ${msg.from} [${statusContato}]`;
+  const logMensagem = `[MENSAGEM RECEBIDA] [${etapaAtual}] De: ${msg.from} [${statusContato}]`;
   console.log(logMensagem);
   registrarLogLocal(logMensagem, "INFO", "messageReceived", chatId);
 
