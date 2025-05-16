@@ -5,7 +5,7 @@ const path = require("path");
 
 // Módulos internos
 const { obterJogosParaWhatsApp } = require("./scrapper.js");
-const { isContactSaved, responderComLog } = require("./utils.js");
+const { isContactSaved, responderComLog, obterDataBrasilia } = require("./utils.js");
 const gerarTeste = require("./gerarTest");
 const config = require("./config.js");
 
@@ -35,6 +35,7 @@ const userSessions = new Map();
 // Exportar respostasEnviadas como global para acesso externo
 global.respostasEnviadas = 0;
 
+// Inicializar dados
 async function inicializarDados() {
   await supabaseClient.inicializarSupabase();
   const sessions = await supabaseClient.carregarSessoes();
@@ -43,9 +44,28 @@ async function inicializarDados() {
   for (const [id, userData] of sessions.entries()) {
     userSessions.set(id, userData);
   }
-  console.log(
-    `${userSessions.size} sessões carregadas do Supabase com sucesso.`
-  );
+  console.log(`${userSessions.size} sessões carregadas do Supabase com sucesso.`);
+}
+
+// Função para backup de indicações
+function fazerBackupIndicacoes() {
+  try {
+    const backupDir = "./backups";
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir);
+    }
+
+    const agora = obterDataBrasilia();
+    const nomeArquivo = `indicacoes_backup_${agora.toISOString().split("T")[0]}.json`;
+    fs.writeFileSync(
+      `${backupDir}/${nomeArquivo}`,
+      JSON.stringify(indicacoes, null, 2)
+    );
+    return true;
+  } catch (error) {
+    console.error("Erro ao criar backup das indicações:", error);
+    return false;
+  }
 }
 
 // Salvar dados de indicações
@@ -96,17 +116,14 @@ async function registrarLogLocal(
   numero = null
 ) {
   try {
-    // Ainda manter um log local para caso o Supabase esteja indisponível
-    const agora = new Date();
+    const agora = obterDataBrasilia();
     const dataHora = `[${agora.toLocaleDateString("pt-BR")} - ${agora
       .toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
       .replace(":", "-")}]`;
     const logMensagem = `${dataHora} [${nivel}] ${mensagem}\n`;
 
-    // Arquivo local como backup
     fs.appendFileSync(logFile, logMensagem, "utf8");
 
-    // Enviar para o Supabase de forma assíncrona (não aguardar resposta)
     supabaseClient
       .registrarLog(nivel, mensagem, origem, numero)
       .catch((err) => console.error("Erro ao enviar log para Supabase:", err));
@@ -373,13 +390,12 @@ client.on("ready", () => {
   console.log(mensagem);
   registrarLogLocal(mensagem, "INFO", "clientReady", null);
 
-  // Iniciar monitoramento
   setInterval(monitorarSaudeBot, 60000); // Verificar a cada minuto
   setInterval(verificarEstadoConexao, 15 * 60 * 1000); // A cada 15 minutos
   setInterval(salvarTodasSessoes, 5 * 60 * 1000); // A cada 5 minutos
-  // Backup diário
-  const agora = new Date();
-  const proximaMeiaNoite = new Date(agora);
+  
+  const agora = obterDataBrasilia();
+  const proximaMeiaNoite = new Date(obterDataBrasilia());
   proximaMeiaNoite.setHours(24, 0, 0, 0);
   const tempoAteBackup = proximaMeiaNoite - agora;
 
@@ -962,24 +978,24 @@ async function handleMessage(msg) {
 
   // Para usuários novos ou sessões expiradas, cria nova sessão
   if (
-    !userSessions.has(chatId) ||
-    now - userSessions.get(chatId).timestamp > sessionTimeout
-  ) {
-    const novaSessao = { step: "menu", timestamp: now, invalidCount: 0 };
-    await salvarSessao(chatId, novaSessao);
+  !userSessions.has(chatId) ||
+  now - userSessions.get(chatId).timestamp > sessionTimeout
+) {
+  const novaSessao = { step: "menu", timestamp: obterDataBrasilia().getTime(), invalidCount: 0 };
+  await salvarSessao(chatId, novaSessao);
 
-    await responderComLog(
-      msg,
-      "Olá! Como posso te ajudar? Responda com o número da opção que deseja:\n\n" +
-        "1️⃣ Conhecer nossos planos de IPTV\n" +
-        "2️⃣ Testar o serviço gratuitamente\n" +
-        "3️⃣ Saber mais sobre como funciona o IPTV\n" +
-        "4️⃣ Já testei e quero ativar\n" +
-        "5️⃣ Falar com um atendente\n\n" +
-        "⚠️ Um humano não verá suas mensagens até que uma opção válida do robô seja escolhida."
-    );
-    return;
-  }
+  await responderComLog(
+    msg,
+    "Olá! Como posso te ajudar? Responda com o número da opção que deseja:\n\n" +
+      "1️⃣ Conhecer nossos planos de IPTV\n" +
+      "2️⃣ Testar o serviço gratuitamente\n" +
+      "3️⃣ Saber mais sobre como funciona o IPTV\n" +
+      "4️⃣ Já testei e quero ativar\n" +
+      "5️⃣ Falar com um atendente\n\n" +
+      "⚠️ Um humano não verá suas mensagens até que uma opção válida do robô seja escolhida."
+  );
+  return;
+}
 
   const session = userSessions.get(chatId);
 
@@ -1661,4 +1677,5 @@ module.exports = {
   client,
   handleMessage,
   reinicioSuave,
+  userSessions
 };

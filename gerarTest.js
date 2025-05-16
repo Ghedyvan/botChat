@@ -1,8 +1,8 @@
 const axios = require("axios");
 const fs = require("fs");
 const supabaseClient = require('./supabase');
+const { obterDataBrasilia } = require('./utils');
 
-// Registro de testes com timestamp para acompanhamento
 const testesPendentes = new Map();
 
 async function gerarTeste(msg, app) {
@@ -11,11 +11,9 @@ async function gerarTeste(msg, app) {
     
     const userId = msg.from;
     
-    // Verificar se o usuário já fez teste antes
     const verificacao = await supabaseClient.podeRealizarTeste(userId);
     
     if (!verificacao.permitido) {
-      // Usuário não pode fazer teste agora
       const dataFormatada = new Date(verificacao.dataDesbloqueio).toLocaleDateString('pt-BR');
       await msg.reply(
         `⚠️ Você já utilizou seu teste gratuito recentemente.\n\n` +
@@ -25,18 +23,16 @@ async function gerarTeste(msg, app) {
       return;
     }
     
-    // Definir o tipo de dispositivo com base no app
     let dispositivo = "Desconhecido";
     if (app === "iptvstream") dispositivo = "Android/TV Box";
     else if (app === "smarters") dispositivo = "iPhone/iPad";
     else if (app === "xcloud") dispositivo = "Smart TV";
     
-    // Se chegou aqui, pode gerar o teste
     console.log(`Enviando requisição para API de testes...`);
     
     const postData = {
       appName: "com.whatsapp",
-      messageDateTime: new Date().toISOString(),
+      messageDateTime: obterDataBrasilia().toISOString(),
       devicePhone: "",
       deviceName: "",
       senderName: msg._data?.notifyName || "Nome Desconhecido",
@@ -49,12 +45,9 @@ async function gerarTeste(msg, app) {
       postData
     );
 
-    // console.log(`Resposta da API recebida: ${JSON.stringify(response.data)}`);
-
     if (response.data) {
       const tempFilePath = "./temp_response.json";
 
-      // Salva os dados retornados no arquivo JSON
       fs.writeFileSync(
         tempFilePath,
         JSON.stringify(response.data, null, 2),
@@ -66,10 +59,8 @@ async function gerarTeste(msg, app) {
       if (username && password) {
         console.log(`Enviando credenciais para o usuário: ${username}`);
         
-        // Registrar o teste no banco de dados
         await supabaseClient.registrarTesteUsuario(userId, app, dispositivo);
         
-        // Envia os dados com a ordem baseada no valor de `app`
         if (app === "xcloud") {
           await msg.reply(
             `✅ Preencha os 3 campos na ordem abaixo:\n\n` +
@@ -104,7 +95,6 @@ async function gerarTeste(msg, app) {
           );
         }
         
-        // Registrar o teste nos pendentes para acompanhamento posterior
         testesPendentes.set(userId, {
           timestamp: Date.now(),
           app: app,
@@ -113,10 +103,9 @@ async function gerarTeste(msg, app) {
           respondido: false
         });
         
-        // Programar verificação após 2 horas
         setTimeout(() => {
           verificarAcompanhamentoTeste(userId, msg.reply.bind(msg));
-        }, 2 * 60 * 60 * 1000); // 2 horas em milissegundos
+        }, 2 * 60 * 60 * 1000);
         
       } else {
         console.error("API não retornou credenciais");
@@ -125,7 +114,6 @@ async function gerarTeste(msg, app) {
         );
       }
       
-      // Limpar arquivo temporário
       if (fs.existsSync(tempFilePath)) {
         fs.unlinkSync(tempFilePath);
       }
@@ -139,27 +127,23 @@ async function gerarTeste(msg, app) {
   }
 }
 
-// Função para verificar se o usuário respondeu após o teste
 async function verificarAcompanhamentoTeste(userId, replyFunction) {
   try {
-    // Verificar se o usuário ainda está no mapa e se não respondeu
     const testePendente = testesPendentes.get(userId);
     if (!testePendente || testePendente.respondido) {
       console.log(`Teste de ${userId} já foi respondido ou não existe mais`);
       return;
     }
     
-    // Se o usuário não respondeu, enviar mensagem de acompanhamento
     console.log(`Enviando mensagem de acompanhamento para ${userId}`);
-    user.session = "fim";
+    
     const mensagem = 
       `Olá! Seu acesso de teste vence em breve. Funcionou tudo bem?\n\n` +
       `Se você gostou e deseja ativar um plano, é só digitar /planos para ver nossas opções! 😊\n\n` +
-      `_Se teve algum problema ou dúvida, me avise que posso te ajudar._ `
+      `_Se teve algum problema ou dúvida, me avise que posso te ajudar._ `;
     
     await replyFunction(mensagem);
     
-    // Remover do mapa após enviar a mensagem de acompanhamento
     testesPendentes.delete(userId);
     
   } catch (error) {
@@ -167,7 +151,6 @@ async function verificarAcompanhamentoTeste(userId, replyFunction) {
   }
 }
 
-// Função para marcar teste como respondido quando o usuário envia qualquer mensagem
 function marcarTesteRespondido(userId) {
   if (testesPendentes.has(userId)) {
     const teste = testesPendentes.get(userId);

@@ -1,61 +1,47 @@
 const fs = require('fs');
 let ultimaAtividadeTempo = Date.now();
 
-// Log local para evitar importação circular
-function registrarLog(mensagem, logFile = "./logs/bot.log") {
-  const agora = new Date();
-  const dataHora = `[${agora.toLocaleDateString("pt-BR")} - ${agora
-    .toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
-    .replace(":", "-")}]`;
-  const logMensagem = `${dataHora} ${mensagem}\n`;
+function obterDataBrasilia() {
+  return new Date(new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' }));
+}
 
+function registrarLog(mensagem, logFile = "./logs/bot.log") {
+  const agora = obterDataBrasilia();
+  const dataHora = `[${agora.toLocaleDateString('pt-BR')} - ${agora.toLocaleTimeString('pt-BR', { hour: "2-digit", minute: "2-digit" }).replace(":", "-")}]`;
+  const logMensagem = `${dataHora} ${mensagem}\n`;
   fs.appendFileSync(logFile, logMensagem, "utf8");
 }
 
-/**
- * Verifica se um contato está salvo
- * @param {string} chatId - ID do chat no formato "XXXXXXXXXXXX@c.us"
- * @returns {Promise<boolean>} True se o contato estiver salvo
- */
 async function isContactSaved(chatId) {
   try {
     const client = require('./bot').client;
-    
-    // Obter o contato diretamente pelo ID
     const contact = await client.getContactById(chatId);
-    
-    // Verificar se o contato existe e está salvo
     if (contact) {      
-      // Verificação mais confiável usando nome do contato ou isMyContact
-      return contact.name !== undefined || 
-             contact.isMyContact === true || 
-             (contact.pushname && contact.name);
+      return contact.name !== undefined || contact.isMyContact === true || (contact.pushname && contact.name);
     }
-    
-    return false; 
+    return false;
   } catch (error) {
     console.error(`Erro ao verificar se o contato ${chatId} está salvo:`, error);
     registrarLog(`Erro ao verificar se o contato ${chatId} está salvo: ${error.message}`);
-    // Em caso de erro, é mais seguro assumir que não está salvo
-    return false; 
+    return false;
   }
 }
 
-/**
- * Envia uma resposta ao usuário e registra no log
- * @param {Object} msg - Objeto de mensagem do WhatsApp
- * @param {string} texto - Texto a ser enviado
- * @returns {Promise<boolean>} True se bem-sucedido
- */
 async function responderComLog(msg, texto) {
   try {
+    // Obter a sessão atual do usuário antes de responder
+    const { userSessions } = require('./bot');
+    const chatId = msg.from;
+    const sessao = userSessions.get(chatId);
+    const etapaAtual = sessao ? sessao.step : "sem_sessao";
+    
     await msg.reply(texto);
     respostasEnviadas++;
     ultimaAtividadeTempo = Date.now();
     global.respostasEnviadas = (global.respostasEnviadas || 0) + 1;
-
+    
     const textoResumido = texto.length > 50 ? `${texto.substring(0, 50)}...` : texto;
-    const logResposta = `[RESPOSTA ENVIADA] Para: ${msg.from}`;
+    const logResposta = `[RESPOSTA ENVIADA] [${etapaAtual}] Para: ${msg.from} `;
     console.log(logResposta);
     registrarLog(logResposta);
     return true;
@@ -63,8 +49,6 @@ async function responderComLog(msg, texto) {
     const erroResposta = `[ERRO AO ENVIAR] Para: ${msg.from}: ${error.message}`;
     console.error(erroResposta);
     registrarLog(erroResposta);
-    
-    // Tentar novamente com método alternativo
     try {
       const client = require('./bot').client;
       await client.sendMessage(msg.from, texto);
@@ -80,11 +64,6 @@ async function responderComLog(msg, texto) {
   }
 }
 
-/**
- * Verifica se uma string é um número válido
- * @param {string} str - String a ser verificada
- * @returns {boolean} True se for um número
- */
 function isNumeric(str) {
   return /^\d+$/.test(str);
 }
@@ -93,5 +72,6 @@ module.exports = {
   isContactSaved,
   responderComLog,
   isNumeric,
-  registrarLog
+  registrarLog,
+  obterDataBrasilia
 };

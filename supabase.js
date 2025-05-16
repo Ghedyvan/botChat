@@ -1,4 +1,5 @@
 const { createClient } = require('@supabase/supabase-js');
+const { obterDataBrasilia } = require('./utils');
 
 // Configurações do Supabase
 const supabaseUrl = 'https://htnshycvsxfwebsjatbi.supabase.co';
@@ -75,17 +76,15 @@ async function getIndicacoesByNumero(numero) {
  * @returns {Promise<Object|null>} Dados atualizados da indicação
  */
 async function incrementIndicacao(numero, nome) {
-  // Verifica se o registro já existe
   const indicacao = await getIndicacoesByNumero(numero);
   
   if (indicacao) {
-    // Atualiza registro existente
     const { data, error } = await supabase
       .from('indicacoes')
       .update({ 
         quantidade: indicacao.quantidade + 1, 
         nome: nome,
-        data_atualizacao: new Date().toISOString()
+        data_atualizacao: obterDataBrasilia().toISOString()
       })
       .eq('numero', numero)
       .select()
@@ -98,7 +97,6 @@ async function incrementIndicacao(numero, nome) {
     
     return data;
   } else {
-    // Cria novo registro
     const { data, error } = await supabase
       .from('indicacoes')
       .insert([
@@ -106,8 +104,8 @@ async function incrementIndicacao(numero, nome) {
           numero, 
           nome, 
           quantidade: 1,
-          data_criacao: new Date().toISOString(),
-          data_atualizacao: new Date().toISOString()
+          data_criacao: obterDataBrasilia().toISOString(),
+          data_atualizacao: obterDataBrasilia().toISOString()
         }
       ])
       .select()
@@ -276,13 +274,13 @@ async function salvarSessao(numero, sessao) {
       .upsert({
         numero,
         step: sessao.step || 'menu',
-        timestamp: sessao.timestamp ? new Date(sessao.timestamp).toISOString() : new Date().toISOString(),
+        timestamp: sessao.timestamp ? new Date(sessao.timestamp).toISOString() : obterDataBrasilia().toISOString(),
         invalidCount: sessao.invalidCount || 0,
         naoNumericaConsecutivas: sessao.naoNumericaConsecutivas || 0,
         planoSelecionado: sessao.planoSelecionado || null,
         valorPlano: sessao.valorPlano || null,
         metodoPagamento: sessao.metodoPagamento || null,
-        ultima_atualizacao: new Date().toISOString()
+        ultima_atualizacao: obterDataBrasilia().toISOString()
       }, {
         onConflict: 'numero'
       });
@@ -360,12 +358,10 @@ async function removerSessao(numero) {
  */
 async function registrarLog(nivel, mensagem, origem = null, numero = null) {
   try {
-    // Ainda manter o log no console para debug
-    const agora = new Date();
+    const agora = obterDataBrasilia();
     const dataHoraFormatada = `[${agora.toLocaleDateString("pt-BR")} - ${agora.toLocaleTimeString("pt-BR")}]`;
     console.log(`${dataHoraFormatada} [${nivel}] ${mensagem}`);
     
-    // Inserir no Supabase
     const { error } = await supabase
       .from('logs')
       .insert([{
@@ -377,7 +373,6 @@ async function registrarLog(nivel, mensagem, origem = null, numero = null) {
       }]);
       
     if (error) {
-      // Se falhar, não deve interromper a execução do bot
       console.error('Erro ao salvar log no Supabase:', error);
       return false;
     }
@@ -488,25 +483,25 @@ async function verificarTesteUsuario(numero) {
  */
 async function registrarTesteUsuario(numero, app, dispositivo) {
   try {
-    // Verificar se já existe
     const testeExistente = await verificarTesteUsuario(numero);
     
     if (testeExistente) {
-      // Atualizar registro existente
       const { error } = await supabase
         .from('testes_usuarios')
         .update({
           app_utilizado: app,
           dispositivo: dispositivo,
           quantidade_testes: testeExistente.quantidade_testes + 1,
-          data_teste: new Date().toISOString(),
-          ultima_atualizacao: new Date().toISOString()
+          data_teste: obterDataBrasilia().toISOString(),
+          ultima_atualizacao: obterDataBrasilia().toISOString()
         })
         .eq('numero', numero);
         
       return !error;
     } else {
-      // Criar novo registro
+      const dataDesbloqueio = obterDataBrasilia();
+      dataDesbloqueio.setDate(dataDesbloqueio.getDate() + 30); // 30 dias no futuro
+      
       const { error } = await supabase
         .from('testes_usuarios')
         .insert({
@@ -514,7 +509,7 @@ async function registrarTesteUsuario(numero, app, dispositivo) {
           app_utilizado: app,
           dispositivo: dispositivo,
           quantidade_testes: 1,
-          data_desbloqueio: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString() // 30 dias no futuro
+          data_desbloqueio: dataDesbloqueio.toISOString()
         });
         
       return !error;
@@ -534,7 +529,6 @@ async function podeRealizarTeste(numero) {
   try {
     const teste = await verificarTesteUsuario(numero);
     
-    // Nunca fez teste antes
     if (!teste) {
       return { 
         permitido: true,
@@ -542,8 +536,7 @@ async function podeRealizarTeste(numero) {
       };
     }
     
-    // Verificar se já passou o período de bloqueio (30 dias)
-    const agora = new Date();
+    const agora = obterDataBrasilia();
     const dataDesbloqueio = new Date(teste.data_desbloqueio);
     
     if (teste.bloqueado && agora < dataDesbloqueio) {
@@ -556,7 +549,6 @@ async function podeRealizarTeste(numero) {
       };
     }
     
-    // Se já passou o período de bloqueio ou não está bloqueado
     return { 
       permitido: true, 
       motivo: "Período de bloqueio encerrado",
@@ -569,7 +561,6 @@ async function podeRealizarTeste(numero) {
     };
   } catch (error) {
     console.error(`Erro ao verificar disponibilidade de teste para ${numero}:`, error);
-    // Em caso de erro, permitir teste (melhor experiência para o usuário)
     return { permitido: true, motivo: "Erro na verificação" };
   }
 }
