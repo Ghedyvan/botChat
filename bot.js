@@ -156,6 +156,42 @@ const client = new Client({
   },
 });
 
+//Agendamento de reinicio automático
+function agendarReinicioPreventivo() {
+  const horaReinicio = obterDataBrasilia();
+  
+  // Programar para reiniciar às 4:00 AM (horário de menor movimento)
+  horaReinicio.setHours(4, 0, 0, 0);
+  
+  // Se já passou das 4:00 hoje, programe para amanhã
+  if (obterDataBrasilia() > horaReinicio) {
+    horaReinicio.setDate(horaReinicio.getDate() + 1);
+  }
+  
+  const msAteReinicio = horaReinicio - obterDataBrasilia();
+  
+  console.log(`Reinício preventivo programado para: ${horaReinicio.toLocaleString('pt-BR')}`);
+  registrarLogLocal(`Reinício preventivo programado para: ${horaReinicio.toLocaleString('pt-BR')}`, "INFO", "agendarReinicioPreventivo", null);
+  
+  setTimeout(async () => {
+    console.log("Executando reinício preventivo programado");
+    registrarLogLocal("Executando reinício preventivo programado", "INFO", "reinicioPreventivo", null);
+    
+    try {
+      await reinicioSuave();
+      
+      // Agendar próximo reinício
+      agendarReinicioPreventivo();
+    } catch (error) {
+      console.error("Erro durante reinício preventivo:", error);
+      registrarLogLocal(`Erro durante reinício preventivo: ${error.message}`, "ERROR", "reinicioPreventivo", null);
+      
+      // Tentar novamente em 1 hora em caso de falha
+      setTimeout(agendarReinicioPreventivo, 60 * 60 * 1000);
+    }
+  }, msAteReinicio);
+}
+
 async function salvarSessao(chatId, sessaoData) {
   try {
     // Atualiza a cópia em memória
@@ -1690,42 +1726,6 @@ process.on("unhandledRejection", (reason, promise) => {
 (async function inicializar() {
   console.log("Iniciando bot IPTV...");
 
-  // Na função inicializar() adicione:
-function agendarReinicioPreventivo() {
-  const horaReinicio = obterDataBrasilia();
-  
-  // Programar para reiniciar às 4:00 AM (horário de menor movimento)
-  horaReinicio.setHours(4, 0, 0, 0);
-  
-  // Se já passou das 4:00 hoje, programe para amanhã
-  if (obterDataBrasilia() > horaReinicio) {
-    horaReinicio.setDate(horaReinicio.getDate() + 1);
-  }
-  
-  const msAteReinicio = horaReinicio - obterDataBrasilia();
-  
-  console.log(`Reinício preventivo programado para: ${horaReinicio.toLocaleString('pt-BR')}`);
-  registrarLogLocal(`Reinício preventivo programado para: ${horaReinicio.toLocaleString('pt-BR')}`, "INFO", "agendarReinicioPreventivo", null);
-  
-  setTimeout(async () => {
-    console.log("Executando reinício preventivo programado");
-    registrarLogLocal("Executando reinício preventivo programado", "INFO", "reinicioPreventivo", null);
-    
-    try {
-      await reinicioSuave();
-      
-      // Agendar próximo reinício
-      agendarReinicioPreventivo();
-    } catch (error) {
-      console.error("Erro durante reinício preventivo:", error);
-      registrarLogLocal(`Erro durante reinício preventivo: ${error.message}`, "ERROR", "reinicioPreventivo", null);
-      
-      // Tentar novamente em 1 hora em caso de falha
-      setTimeout(agendarReinicioPreventivo, 60 * 60 * 1000);
-    }
-  }, msAteReinicio);
-}
-
   try {
     // Criar pastas necessárias
     ["./backups", "./logs", "./assets"].forEach((dir) => {
@@ -1739,6 +1739,9 @@ function agendarReinicioPreventivo() {
 
     // Inicializar cliente
     await client.initialize();
+
+    // Chamada função reinicio
+    agendarReinicioPreventivo();
 
     console.log("Inicialização concluída!");
   } catch (error) {
