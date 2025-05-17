@@ -2,12 +2,21 @@ const fs = require('fs');
 let ultimaAtividadeTempo = Date.now();
 
 function obterDataBrasilia() {
-  const fusoHorarioBrasiliaEmMinutos = -180; 
+  // Cria uma data UTC
   const dataUTC = new Date();
-  const offsetLocal = dataUTC.getTimezoneOffset();
-  const ajuste = fusoHorarioBrasiliaEmMinutos + offsetLocal;
-
-  return new Date(dataUTC.getTime() + ajuste * 60000);
+  
+  // Obtém a string da data no fuso horário de Brasília
+  const brasiliaString = dataUTC.toLocaleString("pt-BR", {
+    timeZone: "America/Sao_Paulo"
+  });
+  
+  // Converte a string formatada de volta para um objeto Date
+  // Mas precisamos especificar que esta string está no formato brasileiro
+  const [dia, mes, ano, ...resto] = brasiliaString.split(/[\/,\s:]+/);
+  const [hora, minuto, segundo] = resto;
+  
+  // Criar a data usando os componentes extraídos
+  return new Date(ano, mes - 1, dia, hora, minuto, segundo);
 }
 
 function registrarLog(mensagem, logFile = "./logs/bot.log") {
