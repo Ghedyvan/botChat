@@ -138,7 +138,7 @@ async function verificarAcompanhamentoTeste(userId, replyFunction) {
     console.log(`Enviando mensagem de acompanhamento para ${userId}`);
     
     const mensagem = 
-      `Olá! Seu acesso de teste vence em breve. Funcionou tudo bem?\n\n` +
+      `Olá! Seu acesso de teste encerrará em breve. Era isso que você estava buscando?\n\n` +
       `Se você gostou e deseja ativar um plano, é só digitar /planos para ver nossas opções! 😊\n\n` +
       `_Se teve algum problema ou dúvida, me avise que posso te ajudar._ `;
     
