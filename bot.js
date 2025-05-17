@@ -5,7 +5,11 @@ const path = require("path");
 
 // Módulos internos
 const { obterJogosParaWhatsApp } = require("./scrapper.js");
-const { isContactSaved, responderComLog, obterDataBrasilia } = require("./utils.js");
+const {
+  isContactSaved,
+  responderComLog,
+  obterDataBrasilia,
+} = require("./utils.js");
 const gerarTeste = require("./gerarTest");
 const config = require("./config.js");
 
@@ -44,7 +48,9 @@ async function inicializarDados() {
   for (const [id, userData] of sessions.entries()) {
     userSessions.set(id, userData);
   }
-  console.log(`${userSessions.size} sessões carregadas do Supabase com sucesso.`);
+  console.log(
+    `${userSessions.size} sessões carregadas do Supabase com sucesso.`
+  );
 }
 
 // Função para backup de indicações
@@ -56,7 +62,9 @@ function fazerBackupIndicacoes() {
     }
 
     const agora = obterDataBrasilia();
-    const nomeArquivo = `indicacoes_backup_${agora.toISOString().split("T")[0]}.json`;
+    const nomeArquivo = `indicacoes_backup_${
+      agora.toISOString().split("T")[0]
+    }.json`;
     fs.writeFileSync(
       `${backupDir}/${nomeArquivo}`,
       JSON.stringify(indicacoes, null, 2)
@@ -159,33 +167,54 @@ const client = new Client({
 //Agendamento de reinicio automático
 function agendarReinicioPreventivo() {
   const horaReinicio = obterDataBrasilia();
-  
+
   // Programar para reiniciar às 4:00 AM (horário de menor movimento)
   horaReinicio.setHours(4, 0, 0, 0);
-  
+
   // Se já passou das 4:00 hoje, programe para amanhã
   if (obterDataBrasilia() > horaReinicio) {
     horaReinicio.setDate(horaReinicio.getDate() + 1);
   }
-  
+
   const msAteReinicio = horaReinicio - obterDataBrasilia();
-  
-  console.log(`Reinício preventivo programado para: ${horaReinicio.toLocaleString('pt-BR')}`);
-  registrarLogLocal(`Reinício preventivo programado para: ${horaReinicio.toLocaleString('pt-BR')}`, "INFO", "agendarReinicioPreventivo", null);
-  
+
+  console.log(
+    `Reinício preventivo programado para: ${horaReinicio.toLocaleString(
+      "pt-BR"
+    )}`
+  );
+  registrarLogLocal(
+    `Reinício preventivo programado para: ${horaReinicio.toLocaleString(
+      "pt-BR"
+    )}`,
+    "INFO",
+    "agendarReinicioPreventivo",
+    null
+  );
+
   setTimeout(async () => {
     console.log("Executando reinício preventivo programado");
-    registrarLogLocal("Executando reinício preventivo programado", "INFO", "reinicioPreventivo", null);
-    
+    registrarLogLocal(
+      "Executando reinício preventivo programado",
+      "INFO",
+      "reinicioPreventivo",
+      null
+    );
+
     try {
       await reinicioSuave();
-      
+
       // Agendar próximo reinício
       agendarReinicioPreventivo();
     } catch (error) {
       console.error("Erro durante reinício preventivo:", error);
-      registrarLogLocal(`Erro durante reinício preventivo: ${error.message}`, "ERROR", "reinicioPreventivo", null);
-      
+      registrarLogLocal(
+        `Erro durante reinício preventivo: ${error.message}`,
+        "ERROR",
+        "reinicioPreventivo",
+        null
+      );
+
       // Tentar novamente em 1 hora em caso de falha
       setTimeout(agendarReinicioPreventivo, 60 * 60 * 1000);
     }
@@ -214,50 +243,72 @@ async function verificarConexaoAtiva() {
     // Verifica se o estado reportado é "CONNECTED"
     const estadoReportado = await client.getState();
     console.log(`Estado reportado: ${estadoReportado}`);
-    
+
     if (estadoReportado !== "CONNECTED") {
       console.log("Estado diferente de CONNECTED, reconectando...");
-      registrarLogLocal("Estado não conectado detectado, forçando reconexão", "WARN", "verificarConexaoAtiva", null);
-      
+      registrarLogLocal(
+        "Estado não conectado detectado, forçando reconexão",
+        "WARN",
+        "verificarConexaoAtiva",
+        null
+      );
+
       // Tenta reconectar
       setTimeout(() => {
         client.initialize();
       }, 5000);
       return;
     }
-    
+
     // Mesmo que o estado seja CONNECTED, vamos testar enviando uma mensagem para nós mesmos
     const ultimaMensagemRecebida = Date.now() - ultimaAtividadeTempo;
-    
+
     // Se ficou mais de 20 minutos sem receber mensagens, teste enviando para si mesmo
     if (ultimaMensagemRecebida > 20 * 60 * 1000) {
-      console.log("Mais de 20 minutos sem receber mensagens, testando conexão...");
-      
+      console.log(
+        "Mais de 20 minutos sem receber mensagens, testando conexão..."
+      );
+
       try {
         // Enviar mensagem invisível para si mesmo (não aparece no WhatsApp)
         const timestamp = new Date().toISOString();
         await client.sendMessage(`${adminNumber}@c.us`, `_ping_${timestamp}_`);
         console.log("Ping enviado para teste de conexão");
-        
+
         // Definir um timeout para verificar se a mensagem foi recebida
         setTimeout(async () => {
           // Se o tempo da última atividade não mudou, algo está errado
           if (Date.now() - ultimaAtividadeTempo > 21 * 60 * 1000) {
             console.log("Ping não foi detectado, forçando reinicialização...");
-            registrarLogLocal("Ping não detectado, conexão parece estar quebrada", "ERROR", "verificarConexaoAtiva", null);
+            registrarLogLocal(
+              "Ping não detectado, conexão parece estar quebrada",
+              "ERROR",
+              "verificarConexaoAtiva",
+              null
+            );
             await reinicioSuave();
           }
         }, 90000); // Espere 90 segundos para ver se o ping é detectado
       } catch (error) {
         console.error("Erro ao enviar ping:", error);
-        registrarLogLocal(`Erro ao enviar ping: ${error.message}`, "ERROR", "verificarConexaoAtiva", null);
+        registrarLogLocal(
+          `Erro ao enviar ping: ${error.message}`,
+          "ERROR",
+          "verificarConexaoAtiva",
+          null
+        );
         await reinicioSuave();
       }
     }
   } catch (error) {
     console.error("Erro ao verificar conexão ativa:", error);
-    registrarLogLocal(`Erro ao verificar conexão ativa: ${error.message}`, "ERROR", "verificarConexaoAtiva", null);
-    
+    registrarLogLocal(
+      `Erro ao verificar conexão ativa: ${error.message}`,
+      "ERROR",
+      "verificarConexaoAtiva",
+      null
+    );
+
     // Se houve erro ao verificar, tente reiniciar
     await reinicioSuave();
   }
@@ -272,55 +323,77 @@ setInterval(verificarConexaoAtiva, 10 * 60 * 1000); // Verificar a cada 10 minut
 // Função para reinício suave
 async function reinicioSuave() {
   console.log("Realizando reinício suave do bot...");
-  registrarLogLocal("Realizando reinício suave do bot", "INFO", "reinicioSuave", null);
+  registrarLogLocal(
+    "Realizando reinício suave do bot",
+    "INFO",
+    "reinicioSuave",
+    null
+  );
 
   try {
     // 1. Salvar sessões de usuários e outros dados importantes
     for (const [chatId, sessao] of userSessions.entries()) {
       await supabaseClient.salvarSessao(chatId, sessao);
     }
-    
+
     // 2. Fechar a sessão atual do WhatsApp
     try {
       if (client.pupBrowser && !client.pupBrowser.disconnected) {
         console.log("Fechando browser do Puppeteer...");
-        await client.pupBrowser.close().catch(err => console.log("Erro ao fechar browser:", err.message));
+        await client.pupBrowser
+          .close()
+          .catch((err) => console.log("Erro ao fechar browser:", err.message));
       }
     } catch (closeError) {
       console.log("Erro ao tentar fechar browser:", closeError.message);
     }
-    
+
     // 3. Pequeno delay para garantir que tudo foi fechado
-    await new Promise(resolve => setTimeout(resolve, 5000));
-    
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+
     // 4. Resetar contadores e variáveis de estado
     mensagensRecebidas = 0;
     global.respostasEnviadas = 0;
     ultimaAtividadeTempo = Date.now();
-    
+
     // 5. Forçar coleta de lixo (se disponível)
     if (global.gc) global.gc();
-    
+
     // 6. Reiniciar cliente com instância nova
     console.log("Reiniciando cliente WhatsApp...");
     client.initialize();
-    
+
     console.log("Reinício suave concluído com sucesso!");
-    registrarLogLocal("Reinício suave concluído com sucesso", "INFO", "reinicioSuave", null);
+    registrarLogLocal(
+      "Reinício suave concluído com sucesso",
+      "INFO",
+      "reinicioSuave",
+      null
+    );
     return true;
   } catch (error) {
     console.error("Erro durante reinício suave:", error);
-    registrarLogLocal(`Erro durante reinício suave: ${error.message}`, "ERROR", "reinicioSuave", null);
-    
+    registrarLogLocal(
+      `Erro durante reinício suave: ${error.message}`,
+      "ERROR",
+      "reinicioSuave",
+      null
+    );
+
     // Tentar reiniciar de forma mais agressiva em caso de falha
     console.log("Tentando reinício forçado...");
-    
+
     try {
       client.initialize();
       return true;
     } catch (fatalError) {
       console.error("Erro fatal durante reinício forçado:", fatalError);
-      registrarLogLocal(`Erro fatal durante reinício forçado: ${fatalError.message}`, "ERROR", "reinicioForçado", null);
+      registrarLogLocal(
+        `Erro fatal durante reinício forçado: ${fatalError.message}`,
+        "ERROR",
+        "reinicioForçado",
+        null
+      );
       return false;
     }
   }
@@ -470,7 +543,7 @@ client.on("ready", () => {
   setInterval(monitorarSaudeBot, 60000); // Verificar a cada minuto
   setInterval(verificarEstadoConexao, 15 * 60 * 1000); // A cada 15 minutos
   setInterval(salvarTodasSessoes, 5 * 60 * 1000); // A cada 5 minutos
-  
+
   const agora = obterDataBrasilia();
   const proximaMeiaNoite = new Date(obterDataBrasilia());
   proximaMeiaNoite.setHours(24, 0, 0, 0);
@@ -555,7 +628,10 @@ async function handleMessage(msg) {
   }
 
   // Comando para limpar sessão
-  if (msg.body.toLowerCase() === "/clear" || msg.body.toLowerCase() === "/reiniciar_conversa") {
+  if (
+    msg.body.toLowerCase() === "/clear" ||
+    msg.body.toLowerCase() === "/reiniciar_conversa"
+  ) {
     const novaSessao = {
       step: "menu",
       timestamp: Date.now(),
@@ -588,8 +664,12 @@ async function handleMessage(msg) {
   }
 
   //Ver os planos disponíveis
-  if(msg.body.toLowerCase() === "/planos") {
-    const session = userSessions.get(chatId) || { step: "fim", timestamp: Date.now(), invalidCount: 0 };
+  if (msg.body.toLowerCase() === "/planos") {
+    const session = userSessions.get(chatId) || {
+      step: "fim",
+      timestamp: Date.now(),
+      invalidCount: 0,
+    };
     session.step = "fim";
     await salvarSessao(msg.from, session);
     global.respostasEnviadas++;
@@ -783,6 +863,83 @@ async function handleMessage(msg) {
       return;
     }
 
+    // Comando para exportar logs em PDF
+    if (msg.body.toLowerCase().startsWith("/log")) {
+      // Extrair parâmetros: /log [dias=1] [nivel=INFO]
+      const partes = msg.body.split(" ");
+      const dias = partes.length > 1 ? parseInt(partes[1]) || 1 : 1;
+      const nivel = partes.length > 2 ? partes[2].toUpperCase() : null;
+
+      await responderComLog(
+        msg,
+        `🔍 Gerando PDF com logs dos últimos ${dias} dias${
+          nivel ? ` com nível ${nivel}` : ""
+        }...\nPor favor, aguarde.`
+      );
+
+      try {
+        // Obter intervalo de datas
+        const dataFim = obterDataBrasilia();
+        const dataInicio = new Date(dataFim);
+        dataInicio.setDate(dataInicio.getDate() - dias);
+
+        // Obter logs do Supabase
+        const logs = await supabaseClient.consultarLogs(
+          dataInicio,
+          dataFim,
+          nivel,
+          1000
+        );
+
+        if (logs.length === 0) {
+          await responderComLog(
+            msg,
+            "❌ Não foram encontrados logs para o período especificado."
+          );
+          return;
+        }
+
+        // Gerar o PDF com os logs
+        const pdfPath = await gerarPDFComLogs(logs, dias, nivel);
+
+        // Enviar o PDF
+        const media = MessageMedia.fromFilePath(pdfPath);
+        await client.sendMessage(msg.from, media, {
+          caption: `📊 Logs do sistema - Últimos ${dias} dias${
+            nivel ? ` (${nivel})` : ""
+          }`,
+          sendMediaAsDocument: true,
+        });
+
+        // Remover arquivo temporário após envio
+        setTimeout(() => {
+          fs.unlink(pdfPath, (err) => {
+            if (err)
+              console.error(
+                `Erro ao remover arquivo temporário: ${err.message}`
+              );
+          });
+        }, 5000);
+
+        registrarLogLocal(
+          `PDF com ${logs.length} logs gerado e enviado`,
+          "INFO",
+          "comandoLog",
+          msg.from
+        );
+      } catch (error) {
+        console.error("Erro ao gerar PDF de logs:", error);
+        await responderComLog(msg, `❌ Erro ao gerar PDF: ${error.message}`);
+        registrarLogLocal(
+          `Erro ao gerar PDF de logs: ${error.message}`,
+          "ERROR",
+          "comandoLog",
+          msg.from
+        );
+      }
+      return;
+    }
+
     // Comando para ajustar indicações
     if (msg.body.toLowerCase().startsWith("/ajustar")) {
       const [_, quantidade] = msg.body.split(" ");
@@ -918,6 +1075,7 @@ async function handleMessage(msg) {
           "*/reiniciar -* Reinicia o bot suavemente\n" +
           "*/resetar_todos -* Limpa todas as sessões de usuários\n" +
           "*/status -* Mostra estatísticas do bot\n\n" +
+          "*/log [dias] [nivel] -* Exporta logs em PDF\n" +
           "📋 *Outros comandos:*\n" +
           "*/comandos -* Exibe lista de comandos para usuários\n" +
           "*/admin -* Exibe esta lista de comandos\n\n" +
@@ -1055,24 +1213,28 @@ async function handleMessage(msg) {
 
   // Para usuários novos ou sessões expiradas, cria nova sessão
   if (
-  !userSessions.has(chatId) ||
-  now - userSessions.get(chatId).timestamp > sessionTimeout
-) {
-  const novaSessao = { step: "menu", timestamp: obterDataBrasilia().getTime(), invalidCount: 0 };
-  await salvarSessao(chatId, novaSessao);
+    !userSessions.has(chatId) ||
+    now - userSessions.get(chatId).timestamp > sessionTimeout
+  ) {
+    const novaSessao = {
+      step: "menu",
+      timestamp: obterDataBrasilia().getTime(),
+      invalidCount: 0,
+    };
+    await salvarSessao(chatId, novaSessao);
 
-  await responderComLog(
-    msg,
-    "Olá! Como posso te ajudar? Responda com o número da opção que deseja:\n\n" +
-      "1️⃣ Conhecer nossos planos de IPTV\n" +
-      "2️⃣ Testar o serviço gratuitamente\n" +
-      "3️⃣ Saber mais sobre como funciona o IPTV\n" +
-      "4️⃣ Já testei e quero ativar\n" +
-      "5️⃣ Falar com um atendente\n\n" +
-      "⚠️ Um humano não verá suas mensagens até que uma opção válida do robô seja escolhida."
-  );
-  return;
-}
+    await responderComLog(
+      msg,
+      "Olá! Como posso te ajudar? Responda com o número da opção que deseja:\n\n" +
+        "1️⃣ Conhecer nossos planos de IPTV\n" +
+        "2️⃣ Testar o serviço gratuitamente\n" +
+        "3️⃣ Saber mais sobre como funciona o IPTV\n" +
+        "4️⃣ Já testei e quero ativar\n" +
+        "5️⃣ Falar com um atendente\n\n" +
+        "⚠️ Um humano não verá suas mensagens até que uma opção válida do robô seja escolhida."
+    );
+    return;
+  }
 
   const session = userSessions.get(chatId);
 
@@ -1755,9 +1917,133 @@ process.on("unhandledRejection", (reason, promise) => {
   }
 })();
 
+/**
+ * Gera um PDF com os logs do sistema
+ * @param {Array} logs - Array de logs obtidos do Supabase
+ * @param {number} dias - Número de dias incluídos no relatório
+ * @param {string} nivel - Nível de log filtrado (opcional)
+ * @returns {Promise<string>} Caminho do arquivo PDF gerado
+ */
+async function gerarPDFComLogs(logs, dias, nivel = null) {
+  return new Promise((resolve, reject) => {
+    try {
+      const PDFDocument = require('pdfkit');
+      
+      // Criar nome do arquivo baseado na data atual
+      const timestamp = obterDataBrasilia().toISOString().replace(/[:.]/g, '-');
+      const filePath = `./logs/logs_${timestamp}.pdf`;
+      
+      // Criar um novo documento PDF
+      const doc = new PDFDocument({
+        margin: 50,
+        size: 'A4'
+      });
+      
+      // Pipe do PDF para o arquivo
+      const stream = fs.createWriteStream(filePath);
+      doc.pipe(stream);
+      
+      // Adicionar título
+      doc.font('Helvetica-Bold')
+         .fontSize(18)
+         .text(`Relatório de Logs do Sistema IPTV Bot`, {
+           align: 'center'
+         });
+      
+      // Adicionar informações do relatório
+      doc.moveDown()
+         .fontSize(12)
+         .text(`Data de geração: ${obterDataBrasilia().toLocaleDateString('pt-BR')} ${obterDataBrasilia().toLocaleTimeString('pt-BR')}`)
+         .text(`Período: Últimos ${dias} dias`)
+         .text(`Nível: ${nivel || 'Todos'}`)
+         .text(`Total de registros: ${logs.length}`)
+         .moveDown();
+      
+      // Linha divisória
+      doc.moveTo(50, doc.y)
+         .lineTo(doc.page.width - 50, doc.y)
+         .stroke()
+         .moveDown();
+      
+      // Cabeçalhos da tabela
+      doc.font('Helvetica-Bold')
+         .fontSize(10)
+         .text('Data/Hora', 50, doc.y, { width: 120 })
+         .text('Nível', 170, doc.y - 12, { width: 50 })
+         .text('Origem', 220, doc.y - 12, { width: 80 })
+         .text('Mensagem', 300, doc.y - 12)
+         .moveDown();
+      
+      // Linha divisória
+      doc.moveTo(50, doc.y - 5)
+         .lineTo(doc.page.width - 50, doc.y - 5)
+         .stroke()
+         .moveDown();
+      
+      // Adicionar logs
+      doc.font('Helvetica');
+      
+      logs.forEach(log => {
+        // Verificar se precisamos de uma nova página
+        if (doc.y > doc.page.height - 100) {
+          doc.addPage();
+        }
+        
+        // Formato de data
+        const dataLog = new Date(log.data_hora);
+        const dataFormatada = `${dataLog.toLocaleDateString('pt-BR')} ${dataLog.toLocaleTimeString('pt-BR')}`;
+        
+        // Definir cor baseada no nível
+        if (log.nivel === 'ERROR') {
+          doc.fillColor('red');
+        } else if (log.nivel === 'WARN') {
+          doc.fillColor('orange');
+        } else {
+          doc.fillColor('black');
+        }
+        
+        // Texto da mensagem pode ser longo, ajustar para quebrar linhas
+        const textoY = doc.y;
+        doc.text(dataFormatada, 50, textoY, { width: 120 })
+           .text(log.nivel, 170, textoY, { width: 50 })
+           .text(log.origem || '-', 220, textoY, { width: 80 });
+        
+        // Calcular a altura necessária para a mensagem
+        const alturaAnterior = doc.y;
+        doc.text(log.mensagem, 300, textoY, { 
+          width: doc.page.width - 350,
+          align: 'left'
+        });
+        
+        // Ajustar espaço para a próxima linha
+        const alturaFinal = Math.max(doc.y, alturaAnterior);
+        doc.y = alturaFinal + 5;
+        
+        // Resetar cor
+        doc.fillColor('black');
+      });
+      
+      // Finalizar o documento
+      doc.end();
+      
+      // Retornar o caminho quando o arquivo estiver pronto
+      stream.on('finish', () => {
+        resolve(filePath);
+      });
+      
+      stream.on('error', (err) => {
+        reject(err);
+      });
+      
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
 module.exports = {
   client,
   handleMessage,
   reinicioSuave,
-  userSessions
+  userSessions,
 };
