@@ -172,82 +172,123 @@ async function salvarSessao(chatId, sessaoData) {
     return false;
   }
 }
+//Ping periódico para ver se o bot está ativo
+async function verificarConexaoAtiva() {
+  try {
+    // Verifica se o estado reportado é "CONNECTED"
+    const estadoReportado = await client.getState();
+    console.log(`Estado reportado: ${estadoReportado}`);
+    
+    if (estadoReportado !== "CONNECTED") {
+      console.log("Estado diferente de CONNECTED, reconectando...");
+      registrarLogLocal("Estado não conectado detectado, forçando reconexão", "WARN", "verificarConexaoAtiva", null);
+      
+      // Tenta reconectar
+      setTimeout(() => {
+        client.initialize();
+      }, 5000);
+      return;
+    }
+    
+    // Mesmo que o estado seja CONNECTED, vamos testar enviando uma mensagem para nós mesmos
+    const ultimaMensagemRecebida = Date.now() - ultimaAtividadeTempo;
+    
+    // Se ficou mais de 20 minutos sem receber mensagens, teste enviando para si mesmo
+    if (ultimaMensagemRecebida > 20 * 60 * 1000) {
+      console.log("Mais de 20 minutos sem receber mensagens, testando conexão...");
+      
+      try {
+        // Enviar mensagem invisível para si mesmo (não aparece no WhatsApp)
+        const timestamp = new Date().toISOString();
+        await client.sendMessage(`${adminNumber}@c.us`, `_ping_${timestamp}_`);
+        console.log("Ping enviado para teste de conexão");
+        
+        // Definir um timeout para verificar se a mensagem foi recebida
+        setTimeout(async () => {
+          // Se o tempo da última atividade não mudou, algo está errado
+          if (Date.now() - ultimaAtividadeTempo > 21 * 60 * 1000) {
+            console.log("Ping não foi detectado, forçando reinicialização...");
+            registrarLogLocal("Ping não detectado, conexão parece estar quebrada", "ERROR", "verificarConexaoAtiva", null);
+            await reinicioSuave();
+          }
+        }, 90000); // Espere 90 segundos para ver se o ping é detectado
+      } catch (error) {
+        console.error("Erro ao enviar ping:", error);
+        registrarLogLocal(`Erro ao enviar ping: ${error.message}`, "ERROR", "verificarConexaoAtiva", null);
+        await reinicioSuave();
+      }
+    }
+  } catch (error) {
+    console.error("Erro ao verificar conexão ativa:", error);
+    registrarLogLocal(`Erro ao verificar conexão ativa: ${error.message}`, "ERROR", "verificarConexaoAtiva", null);
+    
+    // Se houve erro ao verificar, tente reiniciar
+    await reinicioSuave();
+  }
+}
+
+// Chamar esta função na inicialização
+agendarReinicioPreventivo();
+
+// Adicionar o ping periódico aos timers existentes
+setInterval(verificarConexaoAtiva, 10 * 60 * 1000); // Verificar a cada 10 minutos
 
 // Função para reinício suave
 async function reinicioSuave() {
   console.log("Realizando reinício suave do bot...");
-  mensagensRecebidas = 0;
-  global.respostasEnviadas = 0; 
-  registrarLogLocal(
-    "Realizando reinício suave do bot",
-    "INFO",
-    "reinicioSuave",
-    null
-  );
+  registrarLogLocal("Realizando reinício suave do bot", "INFO", "reinicioSuave", null);
 
   try {
-    // 1. Salvar sessões de usuários
+    // 1. Salvar sessões de usuários e outros dados importantes
     for (const [chatId, sessao] of userSessions.entries()) {
       await supabaseClient.salvarSessao(chatId, sessao);
     }
-    // 2. Resetar contadores e variáveis de estado
-    mensagensRecebidas = 0;
-    respostasEnviadas = 0;
-    ultimaAtividadeTempo = Date.now();
-
-    // 3. Limpar caches com tratamento de erro específico
+    
+    // 2. Fechar a sessão atual do WhatsApp
     try {
-      if (client.pupPage && !client.pupPage.isClosed()) {
-        await client.pupPage
-          .evaluate(() => {
-            if (window.caches) {
-              return caches.keys().then((names) => {
-                for (let name of names) caches.delete(name);
-                return true;
-              });
-            }
-            return false;
-          })
-          .catch((err) => {
-            if (err.message.includes("Execution context was destroyed")) {
-              console.log(
-                "Contexto destruído durante limpeza de cache, prosseguindo com reinicialização"
-              );
-              return false;
-            }
-            throw err;
-          });
+      if (client.pupBrowser && !client.pupBrowser.disconnected) {
+        console.log("Fechando browser do Puppeteer...");
+        await client.pupBrowser.close().catch(err => console.log("Erro ao fechar browser:", err.message));
       }
-    } catch (cacheClearError) {
-      console.log(
-        "Erro ao limpar cache, mas continuando com reinício:",
-        cacheClearError.message
-      );
+    } catch (closeError) {
+      console.log("Erro ao tentar fechar browser:", closeError.message);
     }
-
-    // 4. Forçar coleta de lixo (se disponível)
+    
+    // 3. Pequeno delay para garantir que tudo foi fechado
+    await new Promise(resolve => setTimeout(resolve, 5000));
+    
+    // 4. Resetar contadores e variáveis de estado
+    mensagensRecebidas = 0;
+    global.respostasEnviadas = 0;
+    ultimaAtividadeTempo = Date.now();
+    
+    // 5. Forçar coleta de lixo (se disponível)
     if (global.gc) global.gc();
-
+    
+    // 6. Reiniciar cliente com instância nova
+    console.log("Reiniciando cliente WhatsApp...");
+    client.initialize();
+    
     console.log("Reinício suave concluído com sucesso!");
-    registrarLogLocal(
-      "Reinício suave concluído com sucesso",
-      "INFO",
-      "reinicioSuave",
-      null
-    );
+    registrarLogLocal("Reinício suave concluído com sucesso", "INFO", "reinicioSuave", null);
     return true;
   } catch (error) {
     console.error("Erro durante reinício suave:", error);
-    registrarLogLocal(
-      `Erro durante reinício suave: ${error.message}`,
-      "ERROR",
-      "reinicioSuave",
-      null
-    );
-    return false;
+    registrarLogLocal(`Erro durante reinício suave: ${error.message}`, "ERROR", "reinicioSuave", null);
+    
+    // Tentar reiniciar de forma mais agressiva em caso de falha
+    console.log("Tentando reinício forçado...");
+    
+    try {
+      client.initialize();
+      return true;
+    } catch (fatalError) {
+      console.error("Erro fatal durante reinício forçado:", fatalError);
+      registrarLogLocal(`Erro fatal durante reinício forçado: ${fatalError.message}`, "ERROR", "reinicioForçado", null);
+      return false;
+    }
   }
 }
-
 // Verificar estado da conexão regularmente
 async function verificarEstadoConexao() {
   try {
@@ -1648,6 +1689,42 @@ process.on("unhandledRejection", (reason, promise) => {
 // Inicializa o sistema
 (async function inicializar() {
   console.log("Iniciando bot IPTV...");
+
+  // Na função inicializar() adicione:
+function agendarReinicioPreventivo() {
+  const horaReinicio = obterDataBrasilia();
+  
+  // Programar para reiniciar às 4:00 AM (horário de menor movimento)
+  horaReinicio.setHours(4, 0, 0, 0);
+  
+  // Se já passou das 4:00 hoje, programe para amanhã
+  if (obterDataBrasilia() > horaReinicio) {
+    horaReinicio.setDate(horaReinicio.getDate() + 1);
+  }
+  
+  const msAteReinicio = horaReinicio - obterDataBrasilia();
+  
+  console.log(`Reinício preventivo programado para: ${horaReinicio.toLocaleString('pt-BR')}`);
+  registrarLogLocal(`Reinício preventivo programado para: ${horaReinicio.toLocaleString('pt-BR')}`, "INFO", "agendarReinicioPreventivo", null);
+  
+  setTimeout(async () => {
+    console.log("Executando reinício preventivo programado");
+    registrarLogLocal("Executando reinício preventivo programado", "INFO", "reinicioPreventivo", null);
+    
+    try {
+      await reinicioSuave();
+      
+      // Agendar próximo reinício
+      agendarReinicioPreventivo();
+    } catch (error) {
+      console.error("Erro durante reinício preventivo:", error);
+      registrarLogLocal(`Erro durante reinício preventivo: ${error.message}`, "ERROR", "reinicioPreventivo", null);
+      
+      // Tentar novamente em 1 hora em caso de falha
+      setTimeout(agendarReinicioPreventivo, 60 * 60 * 1000);
+    }
+  }, msAteReinicio);
+}
 
   try {
     // Criar pastas necessárias
