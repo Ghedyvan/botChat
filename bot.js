@@ -10,7 +10,7 @@ const {
   responderComLog,
   obterDataBrasilia,
 } = require("./utils.js");
-const gerarTeste = require("./gerarTest");
+const { gerarTeste, marcarTesteRespondido } = require("./gerarTest");
 const config = require("./config.js");
 
 // Banco de dados
