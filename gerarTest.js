@@ -162,5 +162,6 @@ function marcarTesteRespondido(userId) {
 
 module.exports = {
   gerarTeste,
-  marcarTesteRespondido
+  marcarTesteRespondido,
+  testesPendentes
 };

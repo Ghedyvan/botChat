@@ -10,7 +10,7 @@ const {
   responderComLog,
   obterDataBrasilia,
 } = require("./utils.js");
-const { gerarTeste, marcarTesteRespondido } = require("./gerarTest");
+const { gerarTeste, marcarTesteRespondido,testesPendentes } = require("./gerarTest");
 const config = require("./config.js");
 
 // Banco de dados
@@ -1817,6 +1817,13 @@ client.on("message", async (msg) => {
   const statusContato = contatoSalvo ? "YES" : "NO";
   const session = userSessions.get(chatId) || { step: "sem_sessao" };
   const etapaAtual = session.step;
+  
+  // Verificar se o usuário está no mapa antes de chamar a função
+  if (testesPendentes && testesPendentes.has(chatId)) {
+    // Só marca como respondido se realmente estiver no mapa
+    marcarTesteRespondido(chatId);
+    console.log(`Usuário ${chatId} respondeu após receber teste`);
+  }
 
   // Log de mensagem recebida
   const logMensagem = `[MENSAGEM RECEBIDA] [${etapaAtual}] De: ${msg.from} [${statusContato}]`;
