@@ -19,7 +19,7 @@ const supabaseClient = require("./supabase");
 // Configurações
 const adminNumber = config.ADMIN_NUMBER;
 const logFile = config.LOG_FILE;
-const sessionTimeout = config.SESSION_TIMEOUT || 12 * 60 * 60 * 1000; // 12 horas por padrão
+const sessionTimeout = config.SESSION_TIMEOUT || 12 * 60 * 60 * 1000; 
 const indicacoesFile = config.INDICACOES_FILE || "./indicacoes.json";
 
 // Recursos
@@ -35,8 +35,6 @@ let mensagensRecebidas = 0;
 let ultimaAtividadeTempo = Date.now();
 let monitoramentoAtivo = true;
 const userSessions = new Map();
-
-// Exportar respostasEnviadas como global para acesso externo
 global.respostasEnviadas = 0;
 
 // Inicializar dados
@@ -1475,21 +1473,18 @@ async function processarMenuPrincipal(msg, session) {
     );
   } else {
     session.invalidCount = (session.invalidCount || 0) + 1;
-    if (session.invalidCount < 3) {
-      await responderComLog(
-        msg,
-        "Por favor, escolha uma opção válida:\n\n" +
-          "1️⃣ Conhecer nossos planos de IPTV\n" +
-          "2️⃣ Testar o serviço gratuitamente\n" +
-          "3️⃣ Saber mais sobre como funciona o IPTV\n" +
-          "4️⃣ Já testei e quero ativar\n" +
-          "5️⃣ Falar com um atendente\n\n" +
-          "⚠️ Um humano não verá suas mensagens até que uma opção válida do robô seja escolhida."
-      );
-    }
+    await salvarSessao(msg.from, session);
+    
+    // Log da mensagem inválida para monitoramento
+    console.log(`Mensagem inválida de ${msg.from} (invalidCount: ${session.invalidCount})`);
+    registrarLogLocal(
+      `Mensagem inválida no menu principal: "${msg.body}"`,
+      "INFO",
+      "processarMenuPrincipal",
+      msg.from
+    );
   }
 }
-
 // Testar
 async function processarTestar(msg, session) {
   if (msg.body === "1" || msg.body.toLowerCase().includes("celular")) {
