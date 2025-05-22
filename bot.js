@@ -10,7 +10,7 @@ const {
   responderComLog,
   obterDataBrasilia,
 } = require("./utils.js");
-const { gerarTeste, marcarTesteRespondido,testesPendentes } = require("./gerarTest");
+const { gerarTeste, marcarTesteRespondido, testesPendentes, verificarTestesPendentes } = require("./gerarTest");
 const config = require("./config.js");
 
 // Banco de dados
@@ -538,6 +538,7 @@ client.on("ready", () => {
   console.log(mensagem);
   registrarLogLocal(mensagem, "INFO", "clientReady", null);
 
+  setInterval(verificarTestesPendentes, 15 * 60 * 1000); // Verificar a cada 15 minutos
   setInterval(monitorarSaudeBot, 60000); // Verificar a cada minuto
   setInterval(verificarEstadoConexao, 15 * 60 * 1000); // A cada 15 minutos
   setInterval(salvarTodasSessoes, 5 * 60 * 1000); // A cada 5 minutos

@@ -100,12 +100,11 @@ async function gerarTeste(msg, app) {
           app: app,
           dispositivo: dispositivo,
           username: username,
-          respondido: false
+          respondido: false,
+          acompanhamentoEnviado: false
         });
         
-        setTimeout(() => {
-          verificarAcompanhamentoTeste(userId, msg.reply.bind(msg));
-        }, 2 * 60 * 60 * 1000);
+        // Não usamos mais setTimeout direto aqui, a verificação periódica vai cuidar disso
         
       } else {
         console.error("API não retornou credenciais");
@@ -130,21 +129,31 @@ async function gerarTeste(msg, app) {
 async function verificarAcompanhamentoTeste(userId, replyFunction) {
   try {
     const testePendente = testesPendentes.get(userId);
-    if (!testePendente || testePendente.respondido) {
-      console.log(`Teste de ${userId} já foi respondido ou não existe mais`);
+    if (!testePendente || testePendente.respondido || testePendente.acompanhamentoEnviado) {
+      console.log(`Teste de ${userId} já foi respondido, acompanhado ou não existe mais`);
       return;
     }
     
     console.log(`Enviando mensagem de acompanhamento para ${userId}`);
     
     const mensagem = 
-      `Olá! Seu acesso de teste encerrará em breve. Era isso que você estava buscando?\n\n` +
+      `Olá! Seu acesso de teste vai expirar em breve. Era isso que você estava buscando?\n\n` +
       `Se você gostou e deseja ativar um plano, é só digitar /planos para ver nossas opções! 😊\n\n` +
       `_Se teve algum problema ou dúvida, me avise que posso te ajudar._ `;
     
     await replyFunction(mensagem);
     
-    testesPendentes.delete(userId);
+    // Marcar que o acompanhamento foi enviado
+    testePendente.acompanhamentoEnviado = true;
+    testesPendentes.set(userId, testePendente);
+    
+    // Após enviar o acompanhamento, aguardar mais 1 hora antes de remover do mapa
+    setTimeout(() => {
+      if (testesPendentes.has(userId)) {
+        console.log(`Removendo ${userId} do mapa de testes pendentes após acompanhamento`);
+        testesPendentes.delete(userId);
+      }
+    }, 60 * 60 * 1000); // 1 hora
     
   } catch (error) {
     console.error(`Erro ao enviar mensagem de acompanhamento para ${userId}:`, error);
@@ -160,8 +169,50 @@ function marcarTesteRespondido(userId) {
   }
 }
 
+// Nova função para verificar periodicamente todos os testes pendentes
+function verificarTestesPendentes() {
+  console.log(`Verificando ${testesPendentes.size} testes pendentes...`);
+  
+  const agora = Date.now();
+  
+  for (const [userId, teste] of testesPendentes.entries()) {
+    // Verificar se já passaram 2 horas desde a geração do teste
+    if (agora - teste.timestamp >= 2 * 60 * 60 * 1000 && !teste.respondido && !teste.acompanhamentoEnviado) {
+      console.log(`Enviando acompanhamento para ${userId} (teste gerado há ${Math.floor((agora - teste.timestamp) / (60 * 60 * 1000))} horas)`);
+      
+      // Obter uma referência ao cliente WhatsApp
+      const { client } = require('./bot');
+      
+      // Enviar mensagem de acompanhamento
+      client.sendMessage(userId, 
+        `Olá! Seu acesso de teste expirará em breve. Funcionou tudo bem?\n\n` +
+        `Se você gostou e deseja ativar um plano, é só digitar /planos para ver nossas opções! 😊\n\n` +
+        `_Se teve algum problema ou dúvida, me avise que posso te ajudar._`
+      ).then(() => {
+        console.log(`Mensagem de acompanhamento enviada com sucesso para ${userId}`);
+        
+        // Marcar que o acompanhamento foi enviado
+        teste.acompanhamentoEnviado = true;
+        testesPendentes.set(userId, teste);
+        
+        // Após o envio bem-sucedido do acompanhamento, remova do mapa após 1 hora
+        setTimeout(() => {
+          if (testesPendentes.has(userId)) {
+            console.log(`Removendo ${userId} do mapa de testes pendentes após acompanhamento`);
+            testesPendentes.delete(userId);
+          }
+        }, 60 * 60 * 1000); // 1 hora depois do acompanhamento
+        
+      }).catch(err => {
+        console.error(`Erro ao enviar mensagem de acompanhamento para ${userId}:`, err);
+      });
+    }
+  }
+}
+
 module.exports = {
   gerarTeste,
   marcarTesteRespondido,
-  testesPendentes
+  testesPendentes,
+  verificarTestesPendentes
 };
