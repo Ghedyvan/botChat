@@ -3,16 +3,15 @@ module.exports = {
     {
       name: "bot",
       script: "bot.js",
-      watch: {
-        ignored: [
-          "node_modules",
-          "*.json",
-          "*.log",
-          "logs/*",
-          "assets/*",
-          "*.txt",
-        ],
-      },
+      watch: true,
+      ignore_watch: [
+        "node_modules",
+        "*.json",
+        "*.log",
+        "logs",
+        "assets",
+        "*.txt",
+      ],
       max_memory_restart: "512M",
       env: {
         NODE_ENV: "production",
