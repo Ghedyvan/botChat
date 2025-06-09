@@ -3,6 +3,29 @@ const moment = require("moment-timezone");
 const fs = require("fs");
 const path = require("path");
 const cron = require("node-cron");
+let browserInstance = null;
+
+async function getBrowserInstance() {
+  if (!browserInstance || browserInstance.disconnected) {
+    browserInstance = await puppeteer.launch({
+      headless: true,
+      executablePath: "/usr/bin/chromium-browser",
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--single-process",
+        "--no-zygote",
+        "--disable-gpu",
+        "--disable-dev-shm-usage",
+        "--max-old-space-size=256",
+        `--user-data-dir=/tmp/chromium-scrapper-${process.pid}`, 
+        "--no-first-run",
+        "--disable-extensions"
+      ],
+    });
+  }
+  return browserInstance;
+}
 
 async function obterJogosParaWhatsApp() {
   const url =
@@ -57,23 +80,10 @@ async function obterJogosParaWhatsApp() {
     }
   }
 
-  // Se o cache não existir ou estiver desatualizado, recria o cache
-  // const browser = await puppeteer.launch({ headless: true });
-
-  const browser = await puppeteer.launch({
-    headless: true,
-    executablePath: "/usr/bin/chromium-browser", // Caminho do executável do Chromium
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--single-process",
-      "--no-zygote",
-      "--disable-gpu",
-      "--disable-dev-shm-usage",
-      "--max-old-space-size=256",
-    ],
-  });
+  const browser = await getBrowserInstance();
   const page = await browser.newPage();
+
+  
 
   try {
     await page.goto(url, { waitUntil: "domcontentloaded" });
@@ -102,7 +112,7 @@ async function obterJogosParaWhatsApp() {
       return dados;
     });
 
-    await browser.close();
+    await page.close();
 
     if (!jogos || jogos.length === 0) {
       return "⚠️ Nenhum jogo encontrado no momento.";
