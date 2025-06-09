@@ -9,9 +9,6 @@ let browserInstance = null;
 async function getBrowserInstance() {
   if (!browserInstance || browserInstance.disconnected) {
     try {
-      const uniqueId = `${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-      const userDataDir = `/tmp/chromium-profile-${uniqueId}`; // Diretório único para cada instância
-
       browserInstance = await puppeteer.launch({
         headless: true,
         executablePath: "/usr/bin/chromium-browser",
@@ -27,13 +24,11 @@ async function getBrowserInstance() {
           "--disable-extensions",
           "--disable-component-extensions-with-background-pages",
           "--disable-backgrounding-occluded-windows",
-          //"--max-old-space-size=512",
-          `--user-data-dir=${userDataDir}`,
+          "--max-old-space-size=512",
         ],
         defaultViewport: null,
       });
-
-      console.log(`Browser instance criada com sucesso usando o perfil: ${userDataDir}`);
+      console.log("Browser instance criada com sucesso");
     } catch (error) {
       console.error("Erro ao criar browser instance:", error);
       throw error;
