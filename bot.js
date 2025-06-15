@@ -1,5 +1,6 @@
 const { Client, LocalAuth, MessageMedia } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
+const browserManager = require('./browserManager');
 const fs = require("fs");
 const path = require("path");
 
@@ -157,11 +158,25 @@ const client = new Client({
       "--disable-component-extensions-with-background-pages",
       "--disable-backgrounding-occluded-windows",
       "--max-old-space-size=512",
+       "--user-data-dir=/tmp/whatsapp-session-bot",
+      // Adicionar porta específica para WhatsApp
+      "--remote-debugging-port=9222",
     ],
     defaultViewport: null,
   },
 });
 
+process.on('SIGINT', async () => {
+  console.log('Fechando browsers...');
+  await browserManager.closeAllBrowsers();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('Fechando browsers...');
+  await browserManager.closeAllBrowsers();
+  process.exit(0);
+});
 //Agendamento de reinicio automático
 function agendarReinicioPreventivo() {
   const horaReinicio = obterDataBrasilia();

@@ -4,37 +4,10 @@ const fs = require("fs");
 const path = require("path");
 const cron = require("node-cron");
 
-let browserInstance = null;
+const browserManager = require("./browserManager");
 
 async function getBrowserInstance() {
-  if (!browserInstance || browserInstance.disconnected) {
-    try {
-      browserInstance = await puppeteer.launch({
-        headless: true,
-        executablePath: "/usr/bin/chromium-browser",
-        args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--single-process",
-          "--no-zygote",
-          "--disable-gpu",
-          "--disable-dev-shm-usage",
-          "--disable-accelerated-2d-canvas",
-          "--no-first-run",
-          "--disable-extensions",
-          "--disable-component-extensions-with-background-pages",
-          "--disable-backgrounding-occluded-windows",
-          "--max-old-space-size=512",
-        ],
-        defaultViewport: null,
-      });
-      console.log("Browser instance criada com sucesso");
-    } catch (error) {
-      console.error("Erro ao criar browser instance:", error);
-      throw error;
-    }
-  }
-  return browserInstance;
+  return await browserManager.getBrowser("scrapper");
 }
 
 async function obterJogosParaWhatsApp() {
@@ -114,6 +87,7 @@ async function obterJogosParaWhatsApp() {
     browser = await getBrowserInstance();
     page = await browser.newPage();
 
+    // Configurar timeout e User-Agent específicos para scraping
     await page.setUserAgent(
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
     );
