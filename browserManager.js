@@ -61,9 +61,13 @@ class BrowserManager {
         "--disable-backgrounding-occluded-windows",
         "--max-old-space-size=512",
         "--disable-features=VizDisplayCompositor",
-        // Separar diretórios por propósito
-        `--user-data-dir=/tmp/${purpose}-browser-session`,
+        // MUDANÇA: Separar melhor os diretórios
+        `--user-data-dir=/tmp/browser-${purpose}-${Date.now()}`,
         `--remote-debugging-port=${basePort}`,
+        // Adicionar flags para estabilidade
+        "--disable-background-timer-throttling",
+        "--disable-backgrounding-occluded-windows",
+        "--disable-renderer-backgrounding",
       ],
       defaultViewport: null,
     });

@@ -158,9 +158,13 @@ const client = new Client({
       "--disable-component-extensions-with-background-pages",
       "--disable-backgrounding-occluded-windows",
       "--max-old-space-size=512",
-       "--user-data-dir=/tmp/whatsapp-session-bot",
-      // Adicionar porta específica para WhatsApp
-      "--remote-debugging-port=9222",
+      // MUDANÇA: Usar diretório específico e porta diferente
+      "--user-data-dir=/tmp/whatsapp-web-session",
+      "--remote-debugging-port=9221", // Porta diferente do scrapper
+      // Adicionar flags para evitar conflitos
+      "--disable-background-timer-throttling",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-renderer-backgrounding",
     ],
     defaultViewport: null,
   },
