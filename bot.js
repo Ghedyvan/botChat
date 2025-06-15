@@ -1,6 +1,6 @@
 const { Client, LocalAuth, MessageMedia } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
-const browserManager = require('./browserManager');
+const browserManager = require("./browserManager");
 const fs = require("fs");
 const path = require("path");
 
@@ -11,7 +11,12 @@ const {
   responderComLog,
   obterDataBrasilia,
 } = require("./utils.js");
-const { gerarTeste, marcarTesteRespondido, testesPendentes, verificarTestesPendentes } = require("./gerarTest");
+const {
+  gerarTeste,
+  marcarTesteRespondido,
+  testesPendentes,
+  verificarTestesPendentes,
+} = require("./gerarTest");
 const config = require("./config.js");
 
 // Banco de dados
@@ -20,7 +25,7 @@ const supabaseClient = require("./supabase");
 // Configurações
 const adminNumber = config.ADMIN_NUMBER;
 const logFile = config.LOG_FILE;
-const sessionTimeout = config.SESSION_TIMEOUT || 12 * 60 * 60 * 1000; 
+const sessionTimeout = config.SESSION_TIMEOUT || 12 * 60 * 60 * 1000;
 const indicacoesFile = config.INDICACOES_FILE || "./indicacoes.json";
 
 // Recursos
@@ -142,43 +147,40 @@ async function registrarLogLocal(
 // Inicializar cliente WhatsApp
 const client = new Client({
   authStrategy: new LocalAuth(),
-  puppeteer: {
-    headless: true,
-    executablePath: "/usr/bin/chromium-browser",
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--single-process",
-      "--no-zygote",
-      "--disable-gpu",
-      "--disable-dev-shm-usage",
-      "--disable-accelerated-2d-canvas",
-      "--no-first-run",
-      "--disable-extensions",
-      "--disable-component-extensions-with-background-pages",
-      "--disable-backgrounding-occluded-windows",
-      "--max-old-space-size=512",
-      // MUDANÇA: Usar diretório específico e porta diferente
-      "--user-data-dir=/tmp/whatsapp-web-session",
-      "--remote-debugging-port=9221", // Porta diferente do scrapper
-      // Adicionar flags para evitar conflitos
-      "--disable-background-timer-throttling",
-      "--disable-backgrounding-occluded-windows",
-      "--disable-renderer-backgrounding",
-    ],
-    defaultViewport: null,
-  },
 });
 
-process.on('SIGINT', async () => {
-  console.log('Fechando browsers...');
-  await browserManager.closeAllBrowsers();
+process.on("SIGINT", async () => {
+  console.log("Fechando aplicação...");
+
+  try {
+    // Fechar browsers gerenciados pelo BrowserManager
+    await browserManager.closeAllBrowsers();
+
+    // Fechar o cliente WhatsApp se estiver ativo
+    if (client && client.pupBrowser && !client.pupBrowser.disconnected) {
+      console.log("Fechando browser do WhatsApp...");
+      await client.pupBrowser.close();
+    }
+  } catch (error) {
+    console.error("Erro durante cleanup:", error);
+  }
+
   process.exit(0);
 });
 
-process.on('SIGTERM', async () => {
-  console.log('Fechando browsers...');
-  await browserManager.closeAllBrowsers();
+process.on("SIGTERM", async () => {
+  console.log("Fechando aplicação...");
+
+  try {
+    await browserManager.closeAllBrowsers();
+
+    if (client && client.pupBrowser && !client.pupBrowser.disconnected) {
+      await client.pupBrowser.close();
+    }
+  } catch (error) {
+    console.error("Erro durante cleanup:", error);
+  }
+
   process.exit(0);
 });
 //Agendamento de reinicio automático
@@ -353,10 +355,14 @@ async function reinicioSuave() {
       await supabaseClient.salvarSessao(chatId, sessao);
     }
 
-    // 2. Fechar a sessão atual do WhatsApp
+    // 2. Fechar browsers gerenciados pelo BrowserManager
+    console.log("Fechando browsers gerenciados...");
+    await browserManager.closeAllBrowsers();
+
+    // 3. Fechar a sessão atual do WhatsApp
     try {
       if (client.pupBrowser && !client.pupBrowser.disconnected) {
-        console.log("Fechando browser do Puppeteer...");
+        console.log("Fechando browser do WhatsApp...");
         await client.pupBrowser
           .close()
           .catch((err) => console.log("Erro ao fechar browser:", err.message));
@@ -365,18 +371,18 @@ async function reinicioSuave() {
       console.log("Erro ao tentar fechar browser:", closeError.message);
     }
 
-    // 3. Pequeno delay para garantir que tudo foi fechado
+    // 4. Pequeno delay para garantir que tudo foi fechado
     await new Promise((resolve) => setTimeout(resolve, 5000));
 
-    // 4. Resetar contadores e variáveis de estado
+    // 5. Resetar contadores e variáveis de estado
     mensagensRecebidas = 0;
     global.respostasEnviadas = 0;
     ultimaAtividadeTempo = Date.now();
 
-    // 5. Forçar coleta de lixo (se disponível)
+    // 6. Forçar coleta de lixo (se disponível)
     if (global.gc) global.gc();
 
-    // 6. Reiniciar cliente com instância nova
+    // 7. Reiniciar cliente com instância nova
     console.log("Reiniciando cliente WhatsApp...");
     client.initialize();
 
@@ -1494,9 +1500,11 @@ async function processarMenuPrincipal(msg, session) {
   } else {
     session.invalidCount = (session.invalidCount || 0) + 1;
     await salvarSessao(msg.from, session);
-    
+
     // Log da mensagem inválida para monitoramento
-    console.log(`Mensagem inválida de ${msg.from} (invalidCount: ${session.invalidCount})`);
+    console.log(
+      `Mensagem inválida de ${msg.from} (invalidCount: ${session.invalidCount})`
+    );
     registrarLogLocal(
       `Mensagem inválida no menu principal: "${msg.body}"`,
       "INFO",
@@ -1832,7 +1840,7 @@ client.on("message", async (msg) => {
   const statusContato = contatoSalvo ? "YES" : "NO";
   const session = userSessions.get(chatId) || { step: "sem_sessao" };
   const etapaAtual = session.step;
-  
+
   // Verificar se o usuário está no mapa antes de chamar a função
   if (testesPendentes && testesPendentes.has(chatId)) {
     // Só marca como respondido se realmente estiver no mapa
@@ -1949,114 +1957,125 @@ process.on("unhandledRejection", (reason, promise) => {
 async function gerarPDFComLogs(logs, dias, nivel = null) {
   return new Promise((resolve, reject) => {
     try {
-      const PDFDocument = require('pdfkit');
-      
+      const PDFDocument = require("pdfkit");
+
       // Criar nome do arquivo baseado na data atual
-      const timestamp = obterDataBrasilia().toISOString().replace(/[:.]/g, '-');
+      const timestamp = obterDataBrasilia().toISOString().replace(/[:.]/g, "-");
       const filePath = `./logs/logs_${timestamp}.pdf`;
-      
+
       // Criar um novo documento PDF
       const doc = new PDFDocument({
         margin: 50,
-        size: 'A4'
+        size: "A4",
       });
-      
+
       // Pipe do PDF para o arquivo
       const stream = fs.createWriteStream(filePath);
       doc.pipe(stream);
-      
+
       // Adicionar título
-      doc.font('Helvetica-Bold')
-         .fontSize(18)
-         .text(`Relatório de Logs do Sistema IPTV Bot`, {
-           align: 'center'
-         });
-      
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(18)
+        .text(`Relatório de Logs do Sistema IPTV Bot`, {
+          align: "center",
+        });
+
       // Adicionar informações do relatório
-      doc.moveDown()
-         .fontSize(12)
-         .text(`Data de geração: ${obterDataBrasilia().toLocaleDateString('pt-BR')} ${obterDataBrasilia().toLocaleTimeString('pt-BR')}`)
-         .text(`Período: Últimos ${dias} dias`)
-         .text(`Nível: ${nivel || 'Todos'}`)
-         .text(`Total de registros: ${logs.length}`)
-         .moveDown();
-      
+      doc
+        .moveDown()
+        .fontSize(12)
+        .text(
+          `Data de geração: ${obterDataBrasilia().toLocaleDateString(
+            "pt-BR"
+          )} ${obterDataBrasilia().toLocaleTimeString("pt-BR")}`
+        )
+        .text(`Período: Últimos ${dias} dias`)
+        .text(`Nível: ${nivel || "Todos"}`)
+        .text(`Total de registros: ${logs.length}`)
+        .moveDown();
+
       // Linha divisória
-      doc.moveTo(50, doc.y)
-         .lineTo(doc.page.width - 50, doc.y)
-         .stroke()
-         .moveDown();
-      
+      doc
+        .moveTo(50, doc.y)
+        .lineTo(doc.page.width - 50, doc.y)
+        .stroke()
+        .moveDown();
+
       // Cabeçalhos da tabela
-      doc.font('Helvetica-Bold')
-         .fontSize(10)
-         .text('Data/Hora', 50, doc.y, { width: 120 })
-         .text('Nível', 170, doc.y - 12, { width: 50 })
-         .text('Origem', 220, doc.y - 12, { width: 80 })
-         .text('Mensagem', 300, doc.y - 12)
-         .moveDown();
-      
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(10)
+        .text("Data/Hora", 50, doc.y, { width: 120 })
+        .text("Nível", 170, doc.y - 12, { width: 50 })
+        .text("Origem", 220, doc.y - 12, { width: 80 })
+        .text("Mensagem", 300, doc.y - 12)
+        .moveDown();
+
       // Linha divisória
-      doc.moveTo(50, doc.y - 5)
-         .lineTo(doc.page.width - 50, doc.y - 5)
-         .stroke()
-         .moveDown();
-      
+      doc
+        .moveTo(50, doc.y - 5)
+        .lineTo(doc.page.width - 50, doc.y - 5)
+        .stroke()
+        .moveDown();
+
       // Adicionar logs
-      doc.font('Helvetica');
-      
-      logs.forEach(log => {
+      doc.font("Helvetica");
+
+      logs.forEach((log) => {
         // Verificar se precisamos de uma nova página
         if (doc.y > doc.page.height - 100) {
           doc.addPage();
         }
-        
+
         // Formato de data
         const dataLog = new Date(log.data_hora);
-        const dataFormatada = `${dataLog.toLocaleDateString('pt-BR')} ${dataLog.toLocaleTimeString('pt-BR')}`;
-        
+        const dataFormatada = `${dataLog.toLocaleDateString(
+          "pt-BR"
+        )} ${dataLog.toLocaleTimeString("pt-BR")}`;
+
         // Definir cor baseada no nível
-        if (log.nivel === 'ERROR') {
-          doc.fillColor('red');
-        } else if (log.nivel === 'WARN') {
-          doc.fillColor('orange');
+        if (log.nivel === "ERROR") {
+          doc.fillColor("red");
+        } else if (log.nivel === "WARN") {
+          doc.fillColor("orange");
         } else {
-          doc.fillColor('black');
+          doc.fillColor("black");
         }
-        
+
         // Texto da mensagem pode ser longo, ajustar para quebrar linhas
         const textoY = doc.y;
-        doc.text(dataFormatada, 50, textoY, { width: 120 })
-           .text(log.nivel, 170, textoY, { width: 50 })
-           .text(log.origem || '-', 220, textoY, { width: 80 });
-        
+        doc
+          .text(dataFormatada, 50, textoY, { width: 120 })
+          .text(log.nivel, 170, textoY, { width: 50 })
+          .text(log.origem || "-", 220, textoY, { width: 80 });
+
         // Calcular a altura necessária para a mensagem
         const alturaAnterior = doc.y;
-        doc.text(log.mensagem, 300, textoY, { 
+        doc.text(log.mensagem, 300, textoY, {
           width: doc.page.width - 350,
-          align: 'left'
+          align: "left",
         });
-        
+
         // Ajustar espaço para a próxima linha
         const alturaFinal = Math.max(doc.y, alturaAnterior);
         doc.y = alturaFinal + 5;
-        
+
         // Resetar cor
-        doc.fillColor('black');
+        doc.fillColor("black");
       });
-      
+
       // Finalizar o documento
       doc.end();
-      
+
       // Retornar o caminho quando o arquivo estiver pronto
-      stream.on('finish', () => {
+      stream.on("finish", () => {
         resolve(filePath);
       });
-      
-      stream.on('error', (err) => {
+
+      stream.on("error", (err) => {
         reject(err);
       });
-      
     } catch (error) {
       reject(error);
     }
