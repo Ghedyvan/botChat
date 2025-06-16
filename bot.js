@@ -157,6 +157,26 @@ const client = new Client({
       "--disable-component-extensions-with-background-pages",
       "--disable-backgrounding-occluded-windows",
       "--max-old-space-size=512",
+      "--disable-web-security",
+      "--disable-features=VizDisplayCompositor",
+      "--disable-ipc-flooding-protection",
+      "--disable-renderer-backgrounding",
+      "--disable-background-timer-throttling",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-client-side-phishing-detection",
+      "--disable-default-apps",
+      "--disable-hang-monitor",
+      "--disable-popup-blocking",
+      "--disable-prompt-on-repost",
+      "--disable-sync",
+      "--disable-translate",
+      "--metrics-recording-only",
+      "--no-default-browser-check",
+      "--safebrowsing-disable-auto-update",
+      "--enable-automation",
+      "--password-store=basic",
+      "--use-mock-keychain",
+      "--disable-blink-features=AutomationControlled"
     ],
     defaultViewport: null,
   },
@@ -334,41 +354,92 @@ async function reinicioSuave() {
       await supabaseClient.salvarSessao(chatId, sessao);
     }
 
-    // 2. Fechar a sessão atual do WhatsApp
+    // 2. Fechar a sessão atual do WhatsApp de forma mais agressiva
     try {
       if (client.pupBrowser && !client.pupBrowser.disconnected) {
         console.log("Fechando browser do Puppeteer...");
-        await client.pupBrowser
-          .close()
-          .catch((err) => console.log("Erro ao fechar browser:", err.message));
+        
+        // Primeiro, tenta fechar todas as páginas
+        const pages = await client.pupBrowser.pages().catch(() => []);
+        for (const page of pages) {
+          try {
+            await page.close();
+          } catch (pageError) {
+            console.log("Erro ao fechar página:", pageError.message);
+          }
+        }
+        
+        // Depois, fecha o browser
+        await client.pupBrowser.close().catch((err) => 
+          console.log("Erro ao fechar browser:", err.message)
+        );
       }
     } catch (closeError) {
       console.log("Erro ao tentar fechar browser:", closeError.message);
     }
 
-    // 3. Pequeno delay para garantir que tudo foi fechado
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    // 3. Destruir a instância do cliente atual
+    try {
+      if (client.pupPage) {
+        await client.pupPage.close().catch(() => {});
+      }
+    } catch (error) {
+      console.log("Erro ao fechar página principal:", error.message);
+    }
 
-    // 4. Resetar contadores e variáveis de estado
+    // 4. Delay mais longo para garantir limpeza completa
+    await new Promise((resolve) => setTimeout(resolve, 10000));
+
+    // 5. Resetar contadores e variáveis de estado
     mensagensRecebidas = 0;
     global.respostasEnviadas = 0;
     ultimaAtividadeTempo = Date.now();
 
-    // 5. Forçar coleta de lixo (se disponível)
-    if (global.gc) global.gc();
+    // 6. Forçar coleta de lixo múltiplas vezes
+    if (global.gc) {
+      global.gc();
+      setTimeout(() => {
+        if (global.gc) global.gc();
+      }, 2000);
+    }
 
-    // 6. Reiniciar cliente com instância nova
-    console.log("Reiniciando cliente WhatsApp...");
-    client.initialize();
+    // 7. Criar nova instância do cliente com retry
+    console.log("Criando nova instância do cliente WhatsApp...");
+    
+    let tentativas = 0;
+    const maxTentativas = 3;
+    
+    while (tentativas < maxTentativas) {
+      try {
+        tentativas++;
+        console.log(`Tentativa ${tentativas} de inicialização...`);
+        
+        await client.initialize();
+        
+        // Aguardar um pouco para ver se a inicialização foi bem-sucedida
+        await new Promise((resolve) => setTimeout(resolve, 5000));
+        
+        console.log("Reinício suave concluído com sucesso!");
+        registrarLogLocal(
+          "Reinício suave concluído com sucesso",
+          "INFO",
+          "reinicioSuave",
+          null
+        );
+        return true;
+        
+      } catch (initError) {
+        console.error(`Erro na tentativa ${tentativas}:`, initError.message);
+        
+        if (tentativas < maxTentativas) {
+          console.log(`Aguardando antes da próxima tentativa...`);
+          await new Promise((resolve) => setTimeout(resolve, 15000));
+        }
+      }
+    }
+    
+    throw new Error("Falha em todas as tentativas de reinicialização");
 
-    console.log("Reinício suave concluído com sucesso!");
-    registrarLogLocal(
-      "Reinício suave concluído com sucesso",
-      "INFO",
-      "reinicioSuave",
-      null
-    );
-    return true;
   } catch (error) {
     console.error("Erro durante reinício suave:", error);
     registrarLogLocal(
@@ -378,18 +449,38 @@ async function reinicioSuave() {
       null
     );
 
-    // Tentar reiniciar de forma mais agressiva em caso de falha
-    console.log("Tentando reinício forçado...");
-
+    // Tentar reinício de emergência usando PM2
+    console.log("Tentando reinício de emergência via PM2...");
+    
     try {
-      client.initialize();
-      return true;
+      const { exec } = require('child_process');
+      exec('pm2 restart bot', (error, stdout, stderr) => {
+        if (error) {
+          console.error('Erro no reinício via PM2:', error.message);
+          registrarLogLocal(
+            `Erro no reinício via PM2: ${error.message}`,
+            "ERROR",
+            "reinicioEmergencia",
+            null
+          );
+        } else {
+          console.log('Reinício via PM2 executado:', stdout);
+          registrarLogLocal(
+            "Reinício de emergência via PM2 executado",
+            "INFO",
+            "reinicioEmergencia",
+            null
+          );
+        }
+      });
+      
+      return false;
     } catch (fatalError) {
-      console.error("Erro fatal durante reinício forçado:", fatalError);
+      console.error("Erro fatal durante reinício de emergência:", fatalError);
       registrarLogLocal(
-        `Erro fatal durante reinício forçado: ${fatalError.message}`,
+        `Erro fatal durante reinício de emergência: ${fatalError.message}`,
         "ERROR",
-        "reinicioForçado",
+        "reinicioEmergencia",
         null
       );
       return false;
