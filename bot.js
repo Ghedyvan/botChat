@@ -140,46 +140,54 @@ async function registrarLogLocal(
 
 // Inicializar cliente WhatsApp
 const client = new Client({
-  authStrategy: new LocalAuth(),
+  authStrategy: new LocalAuth({
+    dataPath: './session'
+  }),
   puppeteer: {
     headless: true,
     executablePath: "/usr/bin/chromium-browser",
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
-      "--single-process",
-      "--no-zygote",
-      "--disable-gpu",
       "--disable-dev-shm-usage",
       "--disable-accelerated-2d-canvas",
       "--no-first-run",
-      "--disable-extensions",
-      "--disable-component-extensions-with-background-pages",
-      "--disable-backgrounding-occluded-windows",
-      "--max-old-space-size=512",
+      "--no-zygote",
+      "--single-process",
+      "--disable-gpu",
       "--disable-web-security",
       "--disable-features=VizDisplayCompositor",
-      "--disable-ipc-flooding-protection",
-      "--disable-renderer-backgrounding",
       "--disable-background-timer-throttling",
       "--disable-backgrounding-occluded-windows",
-      "--disable-client-side-phishing-detection",
-      "--disable-default-apps",
+      "--disable-renderer-backgrounding",
+      "--disable-extensions",
+      "--disable-ipc-flooding-protection",
       "--disable-hang-monitor",
       "--disable-popup-blocking",
       "--disable-prompt-on-repost",
       "--disable-sync",
       "--disable-translate",
-      "--metrics-recording-only",
-      "--no-default-browser-check",
-      "--safebrowsing-disable-auto-update",
+      "--disable-default-apps",
       "--enable-automation",
       "--password-store=basic",
       "--use-mock-keychain",
-      "--disable-blink-features=AutomationControlled"
+      "--disable-blink-features=AutomationControlled",
+      "--disable-client-side-phishing-detection",
+      "--safebrowsing-disable-auto-update",
+      "--metrics-recording-only",
+      "--no-default-browser-check",
+      "--max-old-space-size=512",
+      "--memory-pressure-off",
+      "--disable-component-extensions-with-background-pages"
     ],
     defaultViewport: null,
+    timeout: 120000, // 2 minutos de timeout
+    protocolTimeout: 120000
   },
+  webVersionCache: {
+    type: 'remote',
+    remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
+  }
 });
 
 //Agendamento de reinicio automático
@@ -349,96 +357,94 @@ async function reinicioSuave() {
   );
 
   try {
-    // 1. Salvar sessões de usuários e outros dados importantes
+    // 1. Salvar sessões de usuários
+    console.log("Salvando sessões de usuários...");
     for (const [chatId, sessao] of userSessions.entries()) {
-      await supabaseClient.salvarSessao(chatId, sessao);
+      await supabaseClient.salvarSessao(chatId, sessao).catch(err => 
+        console.log(`Erro ao salvar sessão ${chatId}:`, err.message)
+      );
     }
 
-    // 2. Fechar a sessão atual do WhatsApp de forma mais agressiva
+    // 2. Fechar cliente WhatsApp graciosamente
+    console.log("Fechando cliente WhatsApp...");
     try {
-      if (client.pupBrowser && !client.pupBrowser.disconnected) {
-        console.log("Fechando browser do Puppeteer...");
-        
-        // Primeiro, tenta fechar todas as páginas
-        const pages = await client.pupBrowser.pages().catch(() => []);
-        for (const page of pages) {
-          try {
-            await page.close();
-          } catch (pageError) {
-            console.log("Erro ao fechar página:", pageError.message);
-          }
-        }
-        
-        // Depois, fecha o browser
-        await client.pupBrowser.close().catch((err) => 
-          console.log("Erro ao fechar browser:", err.message)
-        );
+      if (client && typeof client.destroy === 'function') {
+        await Promise.race([
+          client.destroy(),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout ao fechar cliente')), 10000)
+          )
+        ]);
       }
     } catch (closeError) {
-      console.log("Erro ao tentar fechar browser:", closeError.message);
+      console.log("Erro ao fechar cliente:", closeError.message);
     }
 
-    // 3. Destruir a instância do cliente atual
-    try {
-      if (client.pupPage) {
-        await client.pupPage.close().catch(() => {});
-      }
-    } catch (error) {
-      console.log("Erro ao fechar página principal:", error.message);
+    // 3. Limpar processos do browser
+    console.log("Limpando processos do browser...");
+    const { exec } = require('child_process');
+    
+    await new Promise((resolve) => {
+      exec('pkill -f "chromium"', (error) => {
+        // Ignorar erros se não houver processos para matar
+        resolve();
+      });
+    });
+
+    await new Promise((resolve) => {
+      exec('pkill -f "chrome"', (error) => {
+        // Ignorar erros se não houver processos para matar
+        resolve();
+      });
+    });
+
+    // 4. Aguardar limpeza completa
+    console.log("Aguardando limpeza de recursos...");
+    await new Promise((resolve) => setTimeout(resolve, 15000));
+
+    // 5. Forçar coleta de lixo
+    if (global.gc) {
+      console.log("Executando coleta de lixo...");
+      global.gc();
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+      global.gc();
     }
 
-    // 4. Delay mais longo para garantir limpeza completa
-    await new Promise((resolve) => setTimeout(resolve, 10000));
-
-    // 5. Resetar contadores e variáveis de estado
+    // 6. Resetar variáveis de estado
     mensagensRecebidas = 0;
     global.respostasEnviadas = 0;
     ultimaAtividadeTempo = Date.now();
 
-    // 6. Forçar coleta de lixo múltiplas vezes
-    if (global.gc) {
-      global.gc();
-      setTimeout(() => {
-        if (global.gc) global.gc();
-      }, 2000);
-    }
+    // 7. Tentar reinicialização via PM2 (mais confiável)
+    console.log("Solicitando reinício via PM2...");
+    registrarLogLocal(
+      "Solicitando reinício via PM2 após limpeza",
+      "INFO",
+      "reinicioSuave",
+      null
+    );
 
-    // 7. Criar nova instância do cliente com retry
-    console.log("Criando nova instância do cliente WhatsApp...");
-    
-    let tentativas = 0;
-    const maxTentativas = 3;
-    
-    while (tentativas < maxTentativas) {
-      try {
-        tentativas++;
-        console.log(`Tentativa ${tentativas} de inicialização...`);
-        
-        await client.initialize();
-        
-        // Aguardar um pouco para ver se a inicialização foi bem-sucedida
-        await new Promise((resolve) => setTimeout(resolve, 5000));
-        
-        console.log("Reinício suave concluído com sucesso!");
+    exec('pm2 restart bot --update-env', (error, stdout, stderr) => {
+      if (error) {
+        console.error('Erro no reinício via PM2:', error.message);
         registrarLogLocal(
-          "Reinício suave concluído com sucesso",
+          `Erro no reinício via PM2: ${error.message}`,
+          "ERROR",
+          "reinicioSuave",
+          null
+        );
+      } else {
+        console.log('Reinício via PM2 executado com sucesso');
+        registrarLogLocal(
+          "Reinício via PM2 executado com sucesso",
           "INFO",
           "reinicioSuave",
           null
         );
-        return true;
-        
-      } catch (initError) {
-        console.error(`Erro na tentativa ${tentativas}:`, initError.message);
-        
-        if (tentativas < maxTentativas) {
-          console.log(`Aguardando antes da próxima tentativa...`);
-          await new Promise((resolve) => setTimeout(resolve, 15000));
-        }
       }
-    }
-    
-    throw new Error("Falha em todas as tentativas de reinicialização");
+    });
+
+    return true;
 
   } catch (error) {
     console.error("Erro durante reinício suave:", error);
@@ -449,42 +455,19 @@ async function reinicioSuave() {
       null
     );
 
-    // Tentar reinício de emergência usando PM2
-    console.log("Tentando reinício de emergência via PM2...");
+    // Fallback: forçar reinício via PM2
+    console.log("Executando reinício de emergência...");
+    const { exec } = require('child_process');
     
-    try {
-      const { exec } = require('child_process');
-      exec('pm2 restart bot', (error, stdout, stderr) => {
-        if (error) {
-          console.error('Erro no reinício via PM2:', error.message);
-          registrarLogLocal(
-            `Erro no reinício via PM2: ${error.message}`,
-            "ERROR",
-            "reinicioEmergencia",
-            null
-          );
-        } else {
-          console.log('Reinício via PM2 executado:', stdout);
-          registrarLogLocal(
-            "Reinício de emergência via PM2 executado",
-            "INFO",
-            "reinicioEmergencia",
-            null
-          );
-        }
-      });
-      
-      return false;
-    } catch (fatalError) {
-      console.error("Erro fatal durante reinício de emergência:", fatalError);
-      registrarLogLocal(
-        `Erro fatal durante reinício de emergência: ${fatalError.message}`,
-        "ERROR",
-        "reinicioEmergencia",
-        null
-      );
-      return false;
-    }
+    exec('pm2 restart bot --force', (error, stdout, stderr) => {
+      if (error) {
+        console.error('Erro no reinício de emergência:', error.message);
+      } else {
+        console.log('Reinício de emergência executado');
+      }
+    });
+
+    return false;
   }
 }
 // Verificar estado da conexão regularmente
@@ -623,25 +606,26 @@ client.on("authenticated", () => {
   console.log(mensagem);
   registrarLogLocal(mensagem, "INFO", "clientAuth", null);
 });
-
-client.on("ready", () => {
+client.on("ready", async () => {
   const mensagem = "Bot está pronto!";
   console.log(mensagem);
   registrarLogLocal(mensagem, "INFO", "clientReady", null);
 
-  setInterval(verificarTestesPendentes, 15 * 60 * 1000); // Verificar a cada 15 minutos
-  setInterval(monitorarSaudeBot, 60000); // Verificar a cada minuto
-  setInterval(verificarEstadoConexao, 15 * 60 * 1000); // A cada 15 minutos
-  setInterval(salvarTodasSessoes, 5 * 60 * 1000); // A cada 5 minutos
+  // Configurar timeouts e intervalos
+  setInterval(verificarTestesPendentes, 15 * 60 * 1000);
+  setInterval(monitorarSaudeBot, 60000);
+  setInterval(verificarEstadoConexao, 15 * 60 * 1000);
+  setInterval(salvarTodasSessoes, 5 * 60 * 1000);
 
+  // Programar backup diário
   const agora = obterDataBrasilia();
   const proximaMeiaNoite = new Date(obterDataBrasilia());
   proximaMeiaNoite.setHours(24, 0, 0, 0);
   const tempoAteBackup = proximaMeiaNoite - agora;
 
   setTimeout(() => {
-    fazerBackupIndicacoes();
     setInterval(fazerBackupIndicacoes, 24 * 60 * 60 * 1000);
+    fazerBackupIndicacoes();
   }, tempoAteBackup);
 });
 
@@ -654,17 +638,31 @@ client.on("disconnected", async (reason) => {
     null
   );
 
-  setTimeout(() => {
-    console.log("Tentando reconectar...");
-    registrarLogLocal(
-      "Tentando reconectar após desconexão",
-      "INFO",
-      "clientEvent",
-      null
-    );
-    client.initialize();
-  }, 10000);
+  // Aguardar antes de tentar reconectar
+  console.log("Aguardando antes de tentar reconectar...");
+  await new Promise(resolve => setTimeout(resolve, 30000));
+
+  // Tentar reconexão via PM2
+  const { exec } = require('child_process');
+  exec('pm2 restart bot', (error, stdout, stderr) => {
+    if (error) {
+      console.error('Erro ao reiniciar via PM2:', error.message);
+    } else {
+      console.log('Reinício via PM2 solicitado após desconexão');
+    }
+  });
 });
+
+client.on('change_state', (state) => {
+  console.log('Estado do cliente mudou para:', state);
+  registrarLogLocal(
+    `Estado do cliente mudou para: ${state}`,
+    "INFO",
+    "clientStateChange",
+    null
+  );
+});
+
 
 // Processador de mensagens principal
 async function handleMessage(msg) {
