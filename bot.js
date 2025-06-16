@@ -91,6 +91,219 @@ function salvarIndicacoes() {
   }
 }
 
+async function salvarTodasSessoes() {
+  try {
+    console.log('Salvando todas as sessões de usuários...');
+    let sessoesGravadas = 0;
+    
+    for (const [chatId, sessao] of userSessions.entries()) {
+      try {
+        await supabaseClient.salvarSessao(chatId, sessao);
+        sessoesGravadas++;
+      } catch (error) {
+        console.error(`Erro ao salvar sessão ${chatId}:`, error.message);
+        registrarLogLocal(
+          `Erro ao salvar sessão ${chatId}: ${error.message}`,
+          "ERROR",
+          "salvarTodasSessoes",
+          chatId
+        );
+      }
+    }
+    
+    console.log(`${sessoesGravadas} sessões salvas com sucesso.`);
+    registrarLogLocal(
+      `${sessoesGravadas} sessões salvas com sucesso`,
+      "INFO",
+      "salvarTodasSessoes",
+      null
+    );
+    
+    return sessoesGravadas;
+  } catch (error) {
+    console.error('Erro geral ao salvar sessões:', error.message);
+    registrarLogLocal(
+      `Erro geral ao salvar sessões: ${error.message}`,
+      "ERROR",
+      "salvarTodasSessoes",
+      null
+    );
+    return 0;
+  }
+}
+
+async function limparSessoesExpiradas() {
+  try {
+    const agora = Date.now();
+    let sessoesRemovidas = 0;
+    
+    for (const [chatId, sessao] of userSessions.entries()) {
+      const tempoInativo = agora - (sessao.ultimaInteracao || 0);
+      
+      // Remove sessões inativas por mais de 24 horas
+      if (tempoInativo > 24 * 60 * 60 * 1000) {
+        userSessions.delete(chatId);
+        sessoesRemovidas++;
+        
+        // Remover do Supabase também
+        try {
+          await supabaseClient.removerSessao(chatId);
+        } catch (error) {
+          console.error(`Erro ao remover sessão ${chatId} do Supabase:`, error.message);
+        }
+      }
+    }
+    
+    if (sessoesRemovidas > 0) {
+      console.log(`${sessoesRemovidas} sessões expiradas removidas.`);
+      registrarLogLocal(
+        `${sessoesRemovidas} sessões expiradas removidas`,
+        "INFO",
+        "limparSessoesExpiradas",
+        null
+      );
+    }
+    
+    return sessoesRemovidas;
+  } catch (error) {
+    console.error('Erro ao limpar sessões expiradas:', error.message);
+    registrarLogLocal(
+      `Erro ao limpar sessões expiradas: ${error.message}`,
+      "ERROR",
+      "limparSessoesExpiradas",
+      null
+    );
+    return 0;
+  }
+}
+
+// Função para backup de dados críticos
+async function backupDadosCriticos() {
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupDir = './backups';
+    
+    // Criar diretório de backup se não existir
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+    
+    // Backup das sessões
+    const sessionsBackup = {};
+    for (const [chatId, sessao] of userSessions.entries()) {
+      sessionsBackup[chatId] = sessao;
+    }
+    
+    const backupPath = path.join(backupDir, `sessions_backup_${timestamp}.json`);
+    fs.writeFileSync(backupPath, JSON.stringify(sessionsBackup, null, 2));
+    
+    // Backup das indicações
+    if (fs.existsSync(indicacoesFile)) {
+      const indicacoesBackupPath = path.join(backupDir, `indicacoes_backup_${timestamp}.json`);
+      fs.copyFileSync(indicacoesFile, indicacoesBackupPath);
+    }
+    
+    console.log(`Backup criado: ${backupPath}`);
+    registrarLogLocal(
+      `Backup de dados críticos criado: ${backupPath}`,
+      "INFO",
+      "backupDadosCriticos",
+      null
+    );
+    
+    // Limpar backups antigos (manter apenas os últimos 7)
+    limparBackupsAntigos(backupDir);
+    
+    return backupPath;
+  } catch (error) {
+    console.error('Erro ao criar backup:', error.message);
+    registrarLogLocal(
+      `Erro ao criar backup: ${error.message}`,
+      "ERROR",
+      "backupDadosCriticos",
+      null
+    );
+    return null;
+  }
+}
+
+// Função para limpar backups antigos
+function limparBackupsAntigos(backupDir) {
+  try {
+    const arquivos = fs.readdirSync(backupDir)
+      .filter(file => file.startsWith('sessions_backup_') && file.endsWith('.json'))
+      .map(file => ({
+        name: file,
+        path: path.join(backupDir, file),
+        time: fs.statSync(path.join(backupDir, file)).mtime
+      }))
+      .sort((a, b) => b.time - a.time);
+    
+    // Manter apenas os 7 backups mais recentes
+    const arquivosParaRemover = arquivos.slice(7);
+    
+    for (const arquivo of arquivosParaRemover) {
+      fs.unlinkSync(arquivo.path);
+      console.log(`Backup antigo removido: ${arquivo.name}`);
+    }
+  } catch (error) {
+    console.error('Erro ao limpar backups antigos:', error.message);
+  }
+}
+
+// Função para monitorar uso de memória
+function monitorarMemoria() {
+  try {
+    const uso = process.memoryUsage();
+    const usoMB = {
+      rss: Math.round(uso.rss / 1024 / 1024),
+      heapTotal: Math.round(uso.heapTotal / 1024 / 1024),
+      heapUsed: Math.round(uso.heapUsed / 1024 / 1024),
+      external: Math.round(uso.external / 1024 / 1024)
+    };
+    
+    console.log(`Uso de memória - RSS: ${usoMB.rss}MB, Heap: ${usoMB.heapUsed}/${usoMB.heapTotal}MB`);
+    
+    // Se o uso de heap estiver muito alto, forçar coleta de lixo
+    if (usoMB.heapUsed > 400 && global.gc) {
+      console.log('Uso de memória alto, executando coleta de lixo...');
+      global.gc();
+      
+      const usoApos = process.memoryUsage();
+      const usoAposMB = Math.round(usoApos.heapUsed / 1024 / 1024);
+      console.log(`Memória após GC: ${usoAposMB}MB`);
+      
+      registrarLogLocal(
+        `Coleta de lixo executada. Memória: ${usoMB.heapUsed}MB -> ${usoAposMB}MB`,
+        "INFO",
+        "monitorarMemoria",
+        null
+      );
+    }
+    
+    // Se ainda estiver muito alto, considerar reinício
+    if (usoMB.heapUsed > 500) {
+      console.log('Uso de memória crítico, considerando reinício...');
+      registrarLogLocal(
+        `Uso de memória crítico: ${usoMB.heapUsed}MB`,
+        "WARN",
+        "monitorarMemoria",
+        null
+      );
+      
+      // Agendar reinício suave
+      setTimeout(() => {
+        reinicioSuave();
+      }, 5000);
+    }
+    
+    return usoMB;
+  } catch (error) {
+    console.error('Erro ao monitorar memória:', error.message);
+    return null;
+  }
+}
+
 // Backup de indicações
 function fazerBackupIndicacoes() {
   try {
@@ -473,56 +686,36 @@ async function reinicioSuave() {
 // Verificar estado da conexão regularmente
 async function verificarEstadoConexao() {
   try {
-    const estado = await client.getState();
-    console.log(`Estado atual do cliente: ${estado}`);
-
-    if (estado !== "CONNECTED") {
-      console.log("Cliente não está conectado, tentando reconectar...");
-      registrarLogLocal(
-        `Cliente em estado ${estado}, tentando reconectar`,
-        "WARN",
-        "verificarEstadoConexao",
-        null
-      );
-      client.initialize();
+    console.log("Verificando estado da conexão...");
+    
+    if (!client) {
+      console.log("Cliente não inicializado");
+      return false;
     }
 
-    if (client.pupBrowser) {
-      const pages = await client.pupBrowser.pages().catch(() => null);
-      if (!pages) {
-        console.log("Navegador não está respondendo, tentando reiniciar...");
-        registrarLogLocal(
-          "Navegador não está respondendo, tentando reiniciar",
-          "WARN",
-          "verificarEstadoConexao",
-          null
-        );
-        await reinicioSuave();
-      }
-    }
+    const info = await client.getState().catch(() => null);
+    console.log(`Estado atual: ${info || 'Desconhecido'}`);
+    
+    registrarLogLocal(
+      `Verificação de conexão - Estado: ${info || 'Desconhecido'}`,
+      "INFO",
+      "verificarEstadoConexao",
+      null
+    );
+
+    // Atualizar timestamp da última atividade
+    ultimaAtividadeTempo = Date.now();
+    
+    return info === 'CONNECTED';
   } catch (error) {
-    console.error("Erro ao verificar estado da conexão:", error);
+    console.error("Erro ao verificar estado da conexão:", error.message);
     registrarLogLocal(
       `Erro ao verificar estado da conexão: ${error.message}`,
       "ERROR",
       "verificarEstadoConexao",
       null
     );
-
-    if (error.message.includes("Execution context was destroyed")) {
-      console.log(
-        "Contexto destruído detectado em verificação de estado, reiniciando..."
-      );
-      registrarLogLocal(
-        "Contexto destruído detectado em verificação periódica",
-        "ERROR",
-        "verificarEstadoConexao",
-        null
-      );
-      setTimeout(() => {
-        client.initialize();
-      }, 5000);
-    }
+    return false;
   }
 }
 
@@ -612,10 +805,17 @@ client.on("ready", async () => {
   registrarLogLocal(mensagem, "INFO", "clientReady", null);
 
   // Configurar timeouts e intervalos
-  setInterval(verificarTestesPendentes, 15 * 60 * 1000);
-  setInterval(monitorarSaudeBot, 60000);
-  setInterval(verificarEstadoConexao, 15 * 60 * 1000);
-  setInterval(salvarTodasSessoes, 5 * 60 * 1000);
+  setInterval(verificarTestesPendentes, 15 * 60 * 1000); // A cada 15 minutos
+  setInterval(monitorarSaudeBot, 60000); // A cada 1 minuto
+  setInterval(verificarEstadoConexao, 15 * 60 * 1000); // A cada 15 minutos
+  setInterval(salvarTodasSessoes, 5 * 60 * 1000); // A cada 5 minutos
+  setInterval(limparSessoesExpiradas, 60 * 60 * 1000); // A cada 1 hora
+  setInterval(monitorarMemoria, 2 * 60 * 1000); // A cada 2 minutos
+  setInterval(backupDadosCriticos, 6 * 60 * 60 * 1000); // A cada 6 horas
+
+  // Executar limpeza inicial
+  await limparSessoesExpiradas();
+  await backupDadosCriticos();
 
   // Programar backup diário
   const agora = obterDataBrasilia();
@@ -2138,4 +2338,9 @@ module.exports = {
   handleMessage,
   reinicioSuave,
   userSessions,
+  salvarTodasSessoes,
+  limparSessoesExpiradas,
+  backupDadosCriticos,
+  monitorarMemoria,
+  verificarEstadoConexao
 };
