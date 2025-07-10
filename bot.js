@@ -267,18 +267,18 @@ async function processarMensagem(msg) {
     
     // Comandos básicos
     if (msg.body.toLowerCase() === "/status" && msg.from === `${adminNumber}@c.us`) {
-      await responderComLog(msg, `Bot funcionando! Mensagens recebidas: ${mensagensRecebidas}`);
+      await responderComLog(msg, `Bot funcionando! Mensagens recebidas: ${mensagensRecebidas}`, userSessions, client);
       return;
     }
 
     if (msg.body.toLowerCase() === "/reiniciar" && msg.from === `${adminNumber}@c.us`) {
-      await responderComLog(msg, "Reiniciando bot...");
+      await responderComLog(msg, "Reiniciando bot...", userSessions, client);
       await reinicioSuave();
       return;
     }
 
     // Resposta padrão
-    await responderComLog(msg, "Bot em modo de teste. Em breve todas as funcionalidades estarão disponíveis.");
+    await responderComLog(msg, "Bot em modo de teste. Em breve todas as funcionalidades estarão disponíveis.", userSessions, client);
     global.respostasEnviadas++;
 
   } catch (error) {
@@ -336,3 +336,9 @@ client.initialize().catch(error => {
 });
 
 console.log("Bot inicializado com sucesso!");
+
+// Exportações para evitar dependência circular
+module.exports = {
+  client,
+  userSessions
+};

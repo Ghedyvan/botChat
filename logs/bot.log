@@ -217,3 +217,8 @@
 [15/05/2025 - 03-35] Realizando reinício suave do bot
 [15/05/2025 - 03-35] Reinício suave concluído com sucesso
 [15/05/2025 - 03-35] Reinício automático bem sucedido
+[10/07/2025 - 02-58] [ERROR] Erro ao inicializar cliente: Failed to launch the browser process! spawn /usr/bin/chromium-browser ENOENT
+
+
+TROUBLESHOOTING: https://github.com/puppeteer/puppeteer/blob/main/docs/troubleshooting.md
+
