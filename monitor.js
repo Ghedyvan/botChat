@@ -10,6 +10,33 @@ const LOG_FILE = './logs/bot.log';
 let tentativasConsecutivas = 0;
 const MAX_TENTATIVAS_CONSECUTIVAS = 3;
 
+function configurarAmbiente() {
+  console.log('[Monitor] Configurando ambiente VPS headless...');
+  
+  // Configurar variáveis de ambiente para VPS
+  delete process.env.DISPLAY; // Remover DISPLAY para VPS
+  process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
+  process.env.PUPPETEER_EXECUTABLE_PATH = '/usr/bin/chromium-browser';
+  process.env.XDG_CONFIG_HOME = '/tmp/.config';
+  process.env.XDG_CACHE_HOME = '/tmp/.cache';
+  process.env.CHROME_DEVEL_SANDBOX = '/usr/lib/chromium-browser/chrome-sandbox';
+  
+  // Criar diretórios necessários para VPS
+  const dirs = ['/tmp/.config', '/tmp/.cache', '/tmp/chrome-user-data', '/tmp/chrome-data', '/tmp/chrome-cache'];
+  dirs.forEach(dir => {
+    try {
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+        fs.chmodSync(dir, 0o755);
+      }
+    } catch (error) {
+      console.log(`[Monitor] Erro ao criar diretório ${dir}:`, error.message);
+    }
+  });
+  
+  console.log('[Monitor] Ambiente VPS configurado (sem DISPLAY)');
+}
+
 function verificarSaudeBot() {
   try {
     // Verificar se o arquivo de log existe
@@ -81,6 +108,9 @@ function reiniciarBot(motivo) {
   const logEntry = `[${new Date().toLocaleString('pt-BR')}] Bot reiniciado pelo monitor - ${motivo}\n`;
   fs.appendFileSync('./logs/monitor.log', logEntry);
 
+  // Configurar ambiente antes do reinício
+  configurarAmbiente();
+
   // Primeiro, tentar parar o bot graciosamente
   exec('pm2 stop bot', (stopError) => {
     if (stopError) {
@@ -94,17 +124,47 @@ function reiniciarBot(motivo) {
           console.log('[Monitor] Nenhum processo chromium para matar');
         }
 
-        // Aguardar mais um pouco e reiniciar
-        setTimeout(() => {
-          exec('pm2 start bot --update-env', (startError, stdout, stderr) => {
-            if (startError) {
-              console.error(`[Monitor] Erro ao reiniciar bot: ${startError.message}`);
-            } else {
-              console.log('[Monitor] Bot reiniciado com sucesso');
-              tentativasConsecutivas = 0; // Reset contador em caso de sucesso
-            }
-          });
-        }, 5000);
+        // Limpar arquivos temporários
+        exec('rm -rf /tmp/chrome-* /tmp/.X*', () => {
+          
+          // Aguardar mais um pouco e reiniciar com ambiente configurado
+          setTimeout(() => {
+            const scriptReinicio = `#!/bin/bash
+# Script de reinício otimizado para VPS headless
+
+# Configurar ambiente VPS
+export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+export PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+export XDG_CONFIG_HOME=/tmp/.config
+export XDG_CACHE_HOME=/tmp/.cache
+export CHROME_DEVEL_SANDBOX=/usr/lib/chromium-browser/chrome-sandbox
+
+# Remover DISPLAY para VPS
+unset DISPLAY
+
+# Criar diretórios
+mkdir -p /tmp/.config /tmp/.cache /tmp/chrome-user-data /tmp/chrome-data /tmp/chrome-cache
+chmod -R 755 /tmp/.config /tmp/.cache /tmp/chrome-*
+
+# Verificar recursos
+echo "Memória disponível: $(free -h | grep Mem)"
+
+pm2 start bot --update-env --force
+`;
+            
+            fs.writeFileSync('/tmp/restart_with_env_vps.sh', scriptReinicio);
+            exec('chmod +x /tmp/restart_with_env_vps.sh && /tmp/restart_with_env_vps.sh', (startError, stdout, stderr) => {
+              if (startError) {
+                console.error(`[Monitor] Erro ao reiniciar bot: ${startError.message}`);
+                // Fallback: reinício simples
+                exec('pm2 start bot --update-env --force', () => {});
+              } else {
+                console.log('[Monitor] Bot reiniciado com sucesso');
+                tentativasConsecutivas = 0; // Reset contador em caso de sucesso
+              }
+            });
+          }, 5000);
+        });
       });
     }, 10000);
   });
@@ -117,15 +177,29 @@ function limpezaCompleta() {
     'pm2 delete bot',
     'pkill -f "chromium"',
     'pkill -f "chrome"', 
+    'rm -rf /tmp/chrome-*',
+    'rm -rf /tmp/.X*',
     'rm -rf ./session/.wwebjs_*',
-    'sleep 15',
-    'pm2 start ecosystem.config.js --only bot'
+    'sleep 15'
   ];
 
   function executarComando(index) {
     if (index >= comandos.length) {
-      console.log('[Monitor] Limpeza completa finalizada');
-      tentativasConsecutivas = 0;
+      console.log('[Monitor] Iniciando bot após limpeza completa...');
+      
+      // Configurar ambiente após limpeza
+      configurarAmbiente();
+      
+      setTimeout(() => {
+        exec('./setup_environment.sh && pm2 start ecosystem.config.js --only bot', (error, stdout, stderr) => {
+          if (error) {
+            console.error('[Monitor] Erro na inicialização após limpeza:', error.message);
+          } else {
+            console.log('[Monitor] Bot reiniciado após limpeza completa');
+            tentativasConsecutivas = 0;
+          }
+        });
+      }, 5000);
       return;
     }
 
@@ -144,6 +218,9 @@ function limpezaCompleta() {
   executarComando(0);
 }
 
+// Configurar ambiente na inicialização
+configurarAmbiente();
+
 // Criar diretório de logs se não existir
 if (!fs.existsSync('./logs')) {
   fs.mkdirSync('./logs');
@@ -155,5 +232,4 @@ console.log(`[Monitor] Limite de inatividade: ${MAX_TEMPO_SEM_LOG/60000} minutos
 
 // Iniciar monitoramento
 setInterval(verificarSaudeBot, INTERVALO_VERIFICACAO);
-verificarSaudeBot();
-
+verificarSaudeBot(); // Verificar imediatamente
