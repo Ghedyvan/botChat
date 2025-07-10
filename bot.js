@@ -351,52 +351,119 @@ async function registrarLogLocal(
   }
 }
 
+// Função para obter configurações do Puppeteer otimizadas para VPS headless
+function obterConfigPuppeteer() {
+  // Configurar variáveis de ambiente para VPS sem interface gráfica
+  process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
+  process.env.PUPPETEER_EXECUTABLE_PATH = '/usr/bin/chromium-browser';
+  
+  // Configurações específicas para ambiente headless
+  delete process.env.DISPLAY; // Remove DISPLAY em ambiente headless
+  process.env.XVFB_WHD = '1920x1080x24'; // Configuração virtual se necessário
+  
+  return {
+    headless: 'new', // Usar o novo modo headless do Chromium
+    executablePath: "/usr/bin/chromium-browser",
+    args: [
+      // Argumentos essenciais para VPS
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--disable-software-rasterizer",
+      "--disable-background-timer-throttling",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-renderer-backgrounding",
+      "--disable-features=TranslateUI",
+      "--disable-features=VizDisplayCompositor",
+      "--disable-features=AudioServiceOutOfProcess",
+      "--disable-ipc-flooding-protection",
+      
+      // Otimizações de memória para VPS
+      "--memory-pressure-off",
+      "--max-old-space-size=512",
+      "--single-process",
+      "--no-zygote",
+      
+      // Desabilitar recursos desnecessários
+      "--disable-extensions",
+      "--disable-plugins",
+      "--disable-images", // Opcional: desabilitar carregamento de imagens
+      "--disable-javascript", // Opcional: se não precisar de JS no WhatsApp Web
+      "--disable-default-apps",
+      "--disable-sync",
+      "--disable-translate",
+      "--disable-background-networking",
+      "--disable-component-update",
+      "--disable-client-side-phishing-detection",
+      "--disable-hang-monitor",
+      "--disable-popup-blocking",
+      "--disable-prompt-on-repost",
+      "--safebrowsing-disable-auto-update",
+      "--disable-web-security",
+      
+      // Configurações de primeira execução
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--metrics-recording-only",
+      
+      // Configurações de autenticação
+      "--enable-automation",
+      "--password-store=basic",
+      "--use-mock-keychain",
+      "--disable-blink-features=AutomationControlled",
+      
+      // Configurações de áudio/vídeo
+      "--mute-audio",
+      "--disable-audio-output",
+      "--disable-notifications",
+      
+      // Diretórios temporários para VPS
+      "--user-data-dir=/tmp/chrome-user-data",
+      "--data-path=/tmp/chrome-data",
+      "--disk-cache-dir=/tmp/chrome-cache",
+      "--crash-dumps-dir=/tmp/chrome-crashes",
+      
+      // Configurações de rede
+      "--aggressive-cache-discard",
+      "--disable-background-timer-throttling",
+      
+      // Otimizações específicas para ambiente servidor
+      "--disable-dev-tools",
+      "--disable-plugins-discovery",
+      "--disable-preconnect",
+      "--disable-print-preview",
+      "--hide-scrollbars",
+      
+      // Configuração de viewport
+      "--window-size=1920,1080",
+      "--virtual-time-budget=25000"
+    ],
+    defaultViewport: {
+      width: 1920,
+      height: 1080,
+      deviceScaleFactor: 1,
+    },
+    timeout: 120000,
+    protocolTimeout: 240000, // Aumentado para VPS mais lenta
+    ignoreDefaultArgs: ['--disable-extensions', '--enable-automation'],
+    handleSIGINT: false,
+    handleSIGTERM: false,
+    handleSIGHUP: false,
+    
+    // Configurações específicas para VPS
+    pipe: true, // Usar pipe em vez de WebSocket para melhor performance
+    ignoreHTTPSErrors: true,
+    slowMo: 50, // Pequeno delay entre ações para estabilidade
+  };
+}
+
 // Inicializar cliente WhatsApp
 const client = new Client({
   authStrategy: new LocalAuth({
     dataPath: './session'
   }),
-  puppeteer: {
-    headless: true,
-    executablePath: "/usr/bin/chromium-browser",
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-      "--disable-accelerated-2d-canvas",
-      "--no-first-run",
-      "--no-zygote",
-      "--single-process",
-      "--disable-gpu",
-      "--disable-web-security",
-      "--disable-features=VizDisplayCompositor",
-      "--disable-background-timer-throttling",
-      "--disable-backgrounding-occluded-windows",
-      "--disable-renderer-backgrounding",
-      "--disable-extensions",
-      "--disable-ipc-flooding-protection",
-      "--disable-hang-monitor",
-      "--disable-popup-blocking",
-      "--disable-prompt-on-repost",
-      "--disable-sync",
-      "--disable-translate",
-      "--disable-default-apps",
-      "--enable-automation",
-      "--password-store=basic",
-      "--use-mock-keychain",
-      "--disable-blink-features=AutomationControlled",
-      "--disable-client-side-phishing-detection",
-      "--safebrowsing-disable-auto-update",
-      "--metrics-recording-only",
-      "--no-default-browser-check",
-      "--max-old-space-size=512",
-      "--memory-pressure-off",
-      "--disable-component-extensions-with-background-pages"
-    ],
-    defaultViewport: null,
-    timeout: 120000, // 2 minutos de timeout
-    protocolTimeout: 120000
-  },
+  puppeteer: obterConfigPuppeteer(),
   webVersionCache: {
     type: 'remote',
     remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
@@ -559,7 +626,7 @@ agendarReinicioPreventivo();
 // Adicionar o ping periódico aos timers existentes
 setInterval(verificarConexaoAtiva, 10 * 60 * 1000); // Verificar a cada 10 minutos
 
-// Função para reinício suave
+// Função para reinício suave com ambiente configurado
 async function reinicioSuave() {
   console.log("Realizando reinício suave do bot...");
   registrarLogLocal(
@@ -593,63 +660,125 @@ async function reinicioSuave() {
       console.log("Erro ao fechar cliente:", closeError.message);
     }
 
-    // 3. Limpar processos do browser
-    console.log("Limpando processos do browser...");
+    // 3. Limpar processos do browser e preparar ambiente VPS
+    console.log("Limpando processos do browser e preparando ambiente VPS...");
     const { exec } = require('child_process');
     
-    await new Promise((resolve) => {
-      exec('pkill -f "chromium"', (error) => {
-        // Ignorar erros se não houver processos para matar
-        resolve();
-      });
-    });
+    // Comandos específicos para VPS headless
+    const comandosLimpeza = [
+      'pkill -f "chromium" || true',
+      'pkill -f "chrome" || true',
+      'pkill -f "Xvfb" || true', // Limpar display virtual se existir
+      'rm -rf /tmp/chrome-* || true',
+      'rm -rf /tmp/.X* || true',
+      'rm -rf /tmp/.com.google.Chrome* || true',
+      'mkdir -p /tmp/chrome-user-data /tmp/chrome-data /tmp/chrome-cache || true',
+      'chmod -R 755 /tmp/chrome-* || true'
+    ];
 
-    await new Promise((resolve) => {
-      exec('pkill -f "chrome"', (error) => {
-        // Ignorar erros se não houver processos para matar
-        resolve();
+    for (const comando of comandosLimpeza) {
+      await new Promise((resolve) => {
+        exec(comando, (error) => {
+          // Ignorar erros de comandos de limpeza
+          resolve();
+        });
       });
-    });
+    }
 
     // 4. Aguardar limpeza completa
     console.log("Aguardando limpeza de recursos...");
-    await new Promise((resolve) => setTimeout(resolve, 15000));
+    await new Promise((resolve) => setTimeout(resolve, 8000)); // Reduzido para VPS
 
-    // 5. Forçar coleta de lixo
+    // 5. Configurar ambiente para VPS headless
+    console.log("Configurando ambiente para VPS headless...");
+    delete process.env.DISPLAY; // Remover DISPLAY para VPS
+    process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
+    process.env.PUPPETEER_EXECUTABLE_PATH = '/usr/bin/chromium-browser';
+    process.env.HOME = process.env.HOME || '/root';
+    process.env.XDG_CONFIG_HOME = '/tmp/.config';
+    process.env.XDG_CACHE_HOME = '/tmp/.cache';
+    process.env.CHROME_DEVEL_SANDBOX = '/usr/lib/chromium-browser/chrome-sandbox';
+    
+    // 6. Forçar coleta de lixo
     if (global.gc) {
       console.log("Executando coleta de lixo...");
       global.gc();
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       global.gc();
     }
 
-    // 6. Resetar variáveis de estado
+    // 7. Resetar variáveis de estado
     mensagensRecebidas = 0;
     global.respostasEnviadas = 0;
     ultimaAtividadeTempo = Date.now();
 
-    // 7. Tentar reinicialização via PM2 (mais confiável)
-    console.log("Solicitando reinício via PM2...");
+    // 8. Criar script de reinício otimizado para VPS
+    const scriptReinicio = `#!/bin/bash
+# Script otimizado para VPS headless
+
+# Configurar ambiente
+export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+export PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+export HOME=${process.env.HOME || '/root'}
+export XDG_CONFIG_HOME=/tmp/.config
+export XDG_CACHE_HOME=/tmp/.cache
+export CHROME_DEVEL_SANDBOX=/usr/lib/chromium-browser/chrome-sandbox
+
+# Remover DISPLAY para VPS
+unset DISPLAY
+
+# Verificar se chromium existe
+if ! command -v chromium-browser &> /dev/null; then
+    echo "Chromium não encontrado, tentando instalar..."
+    apt-get update && apt-get install -y chromium-browser
+fi
+
+# Criar diretórios necessários
+mkdir -p /tmp/.config /tmp/.cache /tmp/chrome-user-data /tmp/chrome-data /tmp/chrome-cache
+chmod -R 755 /tmp/chrome-* /tmp/.config /tmp/.cache
+
+# Verificar recursos do sistema
+echo "Memória disponível:"
+free -h
+
+# Reiniciar com PM2
+pm2 restart bot --update-env --force
+`;
+
+    fs.writeFileSync('/tmp/restart_bot_vps.sh', scriptReinicio);
+    await new Promise((resolve) => {
+      exec('chmod +x /tmp/restart_bot_vps.sh', () => resolve());
+    });
+
+    // 9. Executar reinício otimizado para VPS
+    console.log("Executando reinício otimizado para VPS...");
     registrarLogLocal(
-      "Solicitando reinício via PM2 após limpeza",
+      "Executando reinício otimizado para VPS",
       "INFO",
       "reinicioSuave",
       null
     );
 
-    exec('pm2 restart bot --update-env', (error, stdout, stderr) => {
+    exec('/tmp/restart_bot_vps.sh', (error, stdout, stderr) => {
       if (error) {
-        console.error('Erro no reinício via PM2:', error.message);
+        console.error('Erro no reinício VPS:', error.message);
         registrarLogLocal(
-          `Erro no reinício via PM2: ${error.message}`,
+          `Erro no reinício VPS: ${error.message}`,
           "ERROR",
           "reinicioSuave",
           null
         );
+        
+        // Fallback: reinício simples
+        exec('pm2 restart bot --update-env --force', (fallbackError) => {
+          if (fallbackError) {
+            console.error('Erro no fallback:', fallbackError.message);
+          }
+        });
       } else {
-        console.log('Reinício via PM2 executado com sucesso');
+        console.log('Reinício VPS executado com sucesso');
         registrarLogLocal(
-          "Reinício via PM2 executado com sucesso",
+          "Reinício VPS executado com sucesso",
           "INFO",
           "reinicioSuave",
           null
