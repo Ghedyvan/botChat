@@ -4,44 +4,40 @@ module.exports = {
       name: "bot",
       script: "bot.js",
       watch: false,
-      max_memory_restart: "768M",
+      max_memory_restart: "600M",
       env: {
         NODE_ENV: "production",
-        DISPLAY: ":99",
+        NODE_OPTIONS: "--max-old-space-size=512 --expose-gc",
+        PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: "true",
+        PUPPETEER_EXECUTABLE_PATH: "/usr/bin/chromium-browser",
+        XDG_CONFIG_HOME: "/tmp/.config",
+        XDG_CACHE_HOME: "/tmp/.cache",
         CHROME_DEVEL_SANDBOX: "/usr/lib/chromium-browser/chrome-sandbox",
-        MAX_BROWSERS: "2",
-        BROWSER_TIMEOUT: "1800000"
+        // Remover DISPLAY para VPS headless
+        // DISPLAY não deve ser definido em VPS sem interface gráfica
       },
-      restart_delay: 20000, // Aumentar delay para cleanup completo
-      max_restarts: 10,
+      restart_delay: 30000,
+      max_restarts: 3,
       autorestart: true,
-      kill_timeout: 15000, // Mais tempo para cleanup
-      listen_timeout: 8000,
-      // Adicionar script de pré-inicialização
-      pre_start: "./cleanup-start.sh",
-      log_file: "./logs/bot-combined.log",
-      out_file: "./logs/bot-out.log",
+      kill_timeout: 20000, // Aumentado para VPS mais lenta
+      wait_ready: false,
+      listen_timeout: 90000, // Aumentado para VPS
       error_file: "./logs/bot-error.log",
-      stop_exit_codes: [0, 1, 2, 15],
+      out_file: "./logs/bot-out.log",
+      log_file: "./logs/bot-combined.log",
+      merge_logs: true,
+      time: true // Adicionar timestamp nos logs
     },
     {
-      name: "watchdog",
-      script: "watchdog.js",
+      name: "monitor",
+      script: "monitor.js",
       watch: false,
-      restart_delay: 30000,
-      max_restarts: 5,
+      restart_delay: 10000,
+      max_restarts: 10,
       autorestart: true,
-      max_memory_restart: "128M",
       env: {
-        NODE_ENV: "production",
-        BOT_LOG_FILE: "./logs/bot.log",
-        WATCHDOG_LOG_FILE: "./logs/watchdog.log",
-        CHECK_INTERVAL: "300000",
-        MAX_INACTIVE_TIME: "900000"
-      },
-      log_file: "./logs/watchdog-combined.log",
-      out_file: "./logs/watchdog-out.log",
-      error_file: "./logs/watchdog-error.log",
-    },
+        NODE_ENV: "production"
+      }
+    }
   ],
 };
