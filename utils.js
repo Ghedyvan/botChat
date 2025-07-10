@@ -1,5 +1,6 @@
 const fs = require('fs');
 let ultimaAtividadeTempo = Date.now();
+let respostasEnviadas = 0;
 
 function obterDataBrasilia() {
   // Cria uma data UTC
@@ -26,9 +27,12 @@ function registrarLog(mensagem, logFile = "./logs/bot.log") {
   fs.appendFileSync(logFile, logMensagem, "utf8");
 }
 
-async function isContactSaved(chatId) {
+async function isContactSaved(chatId, client) {
   try {
-    const client = require('./bot').client;
+    if (!client) {
+      console.error('Cliente WhatsApp não fornecido para isContactSaved');
+      return false;
+    }
     const contact = await client.getContactById(chatId);
     if (contact) {      
       return contact.name !== undefined || contact.isMyContact === true || (contact.pushname && contact.name);
@@ -41,10 +45,15 @@ async function isContactSaved(chatId) {
   }
 }
 
-async function responderComLog(msg, texto) {
+async function responderComLog(msg, texto, userSessions, client) {
   try {
     // Obter a sessão atual do usuário antes de responder
-    const { userSessions } = require('./bot');
+    if (!userSessions) {
+      console.error('userSessions não fornecido para responderComLog');
+      await msg.reply(texto);
+      return true;
+    }
+    
     const chatId = msg.from;
     const sessao = userSessions.get(chatId);
     const etapaAtual = sessao ? sessao.step : "sem_sessao";
@@ -64,7 +73,10 @@ async function responderComLog(msg, texto) {
     console.error(erroResposta);
     registrarLog(erroResposta);
     try {
-      const client = require('./bot').client;
+      if (!client) {
+        console.error('Cliente WhatsApp não fornecido para método alternativo');
+        return false;
+      }
       await client.sendMessage(msg.from, texto);
       console.log(`[RECUPERADO] Mensagem enviada usando método alternativo para: ${msg.from}`);
       registrarLog(`[RECUPERADO] Mensagem enviada usando método alternativo para: ${msg.from}`);
@@ -82,9 +94,47 @@ function isNumeric(str) {
   return /^\d+$/.test(str);
 }
 
+// Wrapper para compatibilidade com versões antigas (detecta dependência circular)
+async function responderComLogCompat(msg, texto, userSessions, client) {
+  // Se userSessions e client não foram fornecidos, tenta obter via require (compatibilidade)
+  if (!userSessions || !client) {
+    try {
+      const botModule = require('./bot');
+      return await responderComLog(msg, texto, botModule.userSessions, botModule.client);
+    } catch (error) {
+      console.warn('Não foi possível obter client/userSessions via require, usando versão básica');
+      try {
+        await msg.reply(texto);
+        return true;
+      } catch (err) {
+        console.error('Erro ao enviar mensagem básica:', err);
+        return false;
+      }
+    }
+  }
+  return await responderComLog(msg, texto, userSessions, client);
+}
+
+// Wrapper para compatibilidade com versões antigas
+async function isContactSavedCompat(chatId, client) {
+  // Se client não foi fornecido, tenta obter via require (compatibilidade)
+  if (!client) {
+    try {
+      const botModule = require('./bot');
+      return await isContactSaved(chatId, botModule.client);
+    } catch (error) {
+      console.warn('Não foi possível obter client via require, retornando false');
+      return false;
+    }
+  }
+  return await isContactSaved(chatId, client);
+}
+
 module.exports = {
   isContactSaved,
   responderComLog,
+  isContactSavedCompat,
+  responderComLogCompat,
   isNumeric,
   registrarLog,
   obterDataBrasilia
