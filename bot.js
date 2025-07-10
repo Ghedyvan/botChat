@@ -1,6 +1,5 @@
 const { Client, LocalAuth, MessageMedia } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
-const browserManager = require("./browserManager");
 const fs = require("fs");
 const path = require("path");
 
@@ -11,12 +10,7 @@ const {
   responderComLog,
   obterDataBrasilia,
 } = require("./utils.js");
-const {
-  gerarTeste,
-  marcarTesteRespondido,
-  testesPendentes,
-  verificarTestesPendentes,
-} = require("./gerarTest");
+const { gerarTeste, marcarTesteRespondido, testesPendentes, verificarTestesPendentes } = require("./gerarTest");
 const config = require("./config.js");
 
 // Banco de dados
@@ -25,7 +19,7 @@ const supabaseClient = require("./supabase");
 // Configurações
 const adminNumber = config.ADMIN_NUMBER;
 const logFile = config.LOG_FILE;
-const sessionTimeout = config.SESSION_TIMEOUT || 12 * 60 * 60 * 1000;
+const sessionTimeout = config.SESSION_TIMEOUT || 12 * 60 * 60 * 1000; 
 const indicacoesFile = config.INDICACOES_FILE || "./indicacoes.json";
 
 // Recursos
@@ -97,6 +91,219 @@ function salvarIndicacoes() {
   }
 }
 
+async function salvarTodasSessoes() {
+  try {
+    console.log('Salvando todas as sessões de usuários...');
+    let sessoesGravadas = 0;
+    
+    for (const [chatId, sessao] of userSessions.entries()) {
+      try {
+        await supabaseClient.salvarSessao(chatId, sessao);
+        sessoesGravadas++;
+      } catch (error) {
+        console.error(`Erro ao salvar sessão ${chatId}:`, error.message);
+        registrarLogLocal(
+          `Erro ao salvar sessão ${chatId}: ${error.message}`,
+          "ERROR",
+          "salvarTodasSessoes",
+          chatId
+        );
+      }
+    }
+    
+    console.log(`${sessoesGravadas} sessões salvas com sucesso.`);
+    registrarLogLocal(
+      `${sessoesGravadas} sessões salvas com sucesso`,
+      "INFO",
+      "salvarTodasSessoes",
+      null
+    );
+    
+    return sessoesGravadas;
+  } catch (error) {
+    console.error('Erro geral ao salvar sessões:', error.message);
+    registrarLogLocal(
+      `Erro geral ao salvar sessões: ${error.message}`,
+      "ERROR",
+      "salvarTodasSessoes",
+      null
+    );
+    return 0;
+  }
+}
+
+async function limparSessoesExpiradas() {
+  try {
+    const agora = Date.now();
+    let sessoesRemovidas = 0;
+    
+    for (const [chatId, sessao] of userSessions.entries()) {
+      const tempoInativo = agora - (sessao.ultimaInteracao || 0);
+      
+      // Remove sessões inativas por mais de 24 horas
+      if (tempoInativo > 24 * 60 * 60 * 1000) {
+        userSessions.delete(chatId);
+        sessoesRemovidas++;
+        
+        // Remover do Supabase também
+        try {
+          await supabaseClient.removerSessao(chatId);
+        } catch (error) {
+          console.error(`Erro ao remover sessão ${chatId} do Supabase:`, error.message);
+        }
+      }
+    }
+    
+    if (sessoesRemovidas > 0) {
+      console.log(`${sessoesRemovidas} sessões expiradas removidas.`);
+      registrarLogLocal(
+        `${sessoesRemovidas} sessões expiradas removidas`,
+        "INFO",
+        "limparSessoesExpiradas",
+        null
+      );
+    }
+    
+    return sessoesRemovidas;
+  } catch (error) {
+    console.error('Erro ao limpar sessões expiradas:', error.message);
+    registrarLogLocal(
+      `Erro ao limpar sessões expiradas: ${error.message}`,
+      "ERROR",
+      "limparSessoesExpiradas",
+      null
+    );
+    return 0;
+  }
+}
+
+// Função para backup de dados críticos
+async function backupDadosCriticos() {
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupDir = './backups';
+    
+    // Criar diretório de backup se não existir
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+    
+    // Backup das sessões
+    const sessionsBackup = {};
+    for (const [chatId, sessao] of userSessions.entries()) {
+      sessionsBackup[chatId] = sessao;
+    }
+    
+    const backupPath = path.join(backupDir, `sessions_backup_${timestamp}.json`);
+    fs.writeFileSync(backupPath, JSON.stringify(sessionsBackup, null, 2));
+    
+    // Backup das indicações
+    if (fs.existsSync(indicacoesFile)) {
+      const indicacoesBackupPath = path.join(backupDir, `indicacoes_backup_${timestamp}.json`);
+      fs.copyFileSync(indicacoesFile, indicacoesBackupPath);
+    }
+    
+    console.log(`Backup criado: ${backupPath}`);
+    registrarLogLocal(
+      `Backup de dados críticos criado: ${backupPath}`,
+      "INFO",
+      "backupDadosCriticos",
+      null
+    );
+    
+    // Limpar backups antigos (manter apenas os últimos 7)
+    limparBackupsAntigos(backupDir);
+    
+    return backupPath;
+  } catch (error) {
+    console.error('Erro ao criar backup:', error.message);
+    registrarLogLocal(
+      `Erro ao criar backup: ${error.message}`,
+      "ERROR",
+      "backupDadosCriticos",
+      null
+    );
+    return null;
+  }
+}
+
+// Função para limpar backups antigos
+function limparBackupsAntigos(backupDir) {
+  try {
+    const arquivos = fs.readdirSync(backupDir)
+      .filter(file => file.startsWith('sessions_backup_') && file.endsWith('.json'))
+      .map(file => ({
+        name: file,
+        path: path.join(backupDir, file),
+        time: fs.statSync(path.join(backupDir, file)).mtime
+      }))
+      .sort((a, b) => b.time - a.time);
+    
+    // Manter apenas os 7 backups mais recentes
+    const arquivosParaRemover = arquivos.slice(7);
+    
+    for (const arquivo of arquivosParaRemover) {
+      fs.unlinkSync(arquivo.path);
+      console.log(`Backup antigo removido: ${arquivo.name}`);
+    }
+  } catch (error) {
+    console.error('Erro ao limpar backups antigos:', error.message);
+  }
+}
+
+// Função para monitorar uso de memória
+function monitorarMemoria() {
+  try {
+    const uso = process.memoryUsage();
+    const usoMB = {
+      rss: Math.round(uso.rss / 1024 / 1024),
+      heapTotal: Math.round(uso.heapTotal / 1024 / 1024),
+      heapUsed: Math.round(uso.heapUsed / 1024 / 1024),
+      external: Math.round(uso.external / 1024 / 1024)
+    };
+    
+    console.log(`Uso de memória - RSS: ${usoMB.rss}MB, Heap: ${usoMB.heapUsed}/${usoMB.heapTotal}MB`);
+    
+    // Se o uso de heap estiver muito alto, forçar coleta de lixo
+    if (usoMB.heapUsed > 400 && global.gc) {
+      console.log('Uso de memória alto, executando coleta de lixo...');
+      global.gc();
+      
+      const usoApos = process.memoryUsage();
+      const usoAposMB = Math.round(usoApos.heapUsed / 1024 / 1024);
+      console.log(`Memória após GC: ${usoAposMB}MB`);
+      
+      registrarLogLocal(
+        `Coleta de lixo executada. Memória: ${usoMB.heapUsed}MB -> ${usoAposMB}MB`,
+        "INFO",
+        "monitorarMemoria",
+        null
+      );
+    }
+    
+    // Se ainda estiver muito alto, considerar reinício
+    if (usoMB.heapUsed > 500) {
+      console.log('Uso de memória crítico, considerando reinício...');
+      registrarLogLocal(
+        `Uso de memória crítico: ${usoMB.heapUsed}MB`,
+        "WARN",
+        "monitorarMemoria",
+        null
+      );
+      
+      // Agendar reinício suave
+      setTimeout(() => {
+        reinicioSuave();
+      }, 5000);
+    }
+    
+    return usoMB;
+  } catch (error) {
+    console.error('Erro ao monitorar memória:', error.message);
+    return null;
+  }
+}
+
 // Backup de indicações
 function fazerBackupIndicacoes() {
   try {
@@ -144,45 +351,125 @@ async function registrarLogLocal(
   }
 }
 
+// Função para obter configurações do Puppeteer otimizadas para VPS headless
+function obterConfigPuppeteer() {
+  // Configurar variáveis de ambiente para VPS sem interface gráfica
+  process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
+  process.env.PUPPETEER_EXECUTABLE_PATH = '/usr/bin/chromium-browser';
+  
+  // Configurações específicas para ambiente headless
+  delete process.env.DISPLAY; // Remove DISPLAY em ambiente headless
+  process.env.XVFB_WHD = '1920x1080x24'; // Configuração virtual se necessário
+  
+  return {
+    headless: 'new', // Usar o novo modo headless do Chromium
+    executablePath: "/usr/bin/chromium-browser",
+    args: [
+      // Argumentos essenciais para VPS
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--disable-software-rasterizer",
+      "--disable-background-timer-throttling",
+      "--disable-backgrounding-occluded-windows",
+      "--disable-renderer-backgrounding",
+      "--disable-features=TranslateUI",
+      "--disable-features=VizDisplayCompositor",
+      "--disable-features=AudioServiceOutOfProcess",
+      "--disable-ipc-flooding-protection",
+      
+      // Otimizações de memória para VPS
+      "--memory-pressure-off",
+      "--max-old-space-size=512",
+      "--single-process",
+      "--no-zygote",
+      
+      // Desabilitar recursos desnecessários
+      "--disable-extensions",
+      "--disable-plugins",
+      "--disable-images", // Opcional: desabilitar carregamento de imagens
+      "--disable-javascript", // Opcional: se não precisar de JS no WhatsApp Web
+      "--disable-default-apps",
+      "--disable-sync",
+      "--disable-translate",
+      "--disable-background-networking",
+      "--disable-component-update",
+      "--disable-client-side-phishing-detection",
+      "--disable-hang-monitor",
+      "--disable-popup-blocking",
+      "--disable-prompt-on-repost",
+      "--safebrowsing-disable-auto-update",
+      "--disable-web-security",
+      
+      // Configurações de primeira execução
+      "--no-first-run",
+      "--no-default-browser-check",
+      "--metrics-recording-only",
+      
+      // Configurações de autenticação
+      "--enable-automation",
+      "--password-store=basic",
+      "--use-mock-keychain",
+      "--disable-blink-features=AutomationControlled",
+      
+      // Configurações de áudio/vídeo
+      "--mute-audio",
+      "--disable-audio-output",
+      "--disable-notifications",
+      
+      // Diretórios temporários para VPS
+      "--user-data-dir=/tmp/chrome-user-data",
+      "--data-path=/tmp/chrome-data",
+      "--disk-cache-dir=/tmp/chrome-cache",
+      "--crash-dumps-dir=/tmp/chrome-crashes",
+      
+      // Configurações de rede
+      "--aggressive-cache-discard",
+      "--disable-background-timer-throttling",
+      
+      // Otimizações específicas para ambiente servidor
+      "--disable-dev-tools",
+      "--disable-plugins-discovery",
+      "--disable-preconnect",
+      "--disable-print-preview",
+      "--hide-scrollbars",
+      
+      // Configuração de viewport
+      "--window-size=1920,1080",
+      "--virtual-time-budget=25000"
+    ],
+    defaultViewport: {
+      width: 1920,
+      height: 1080,
+      deviceScaleFactor: 1,
+    },
+    timeout: 120000,
+    protocolTimeout: 240000, // Aumentado para VPS mais lenta
+    ignoreDefaultArgs: ['--disable-extensions', '--enable-automation'],
+    handleSIGINT: false,
+    handleSIGTERM: false,
+    handleSIGHUP: false,
+    
+    // Configurações específicas para VPS
+    pipe: true, // Usar pipe em vez de WebSocket para melhor performance
+    ignoreHTTPSErrors: true,
+    slowMo: 50, // Pequeno delay entre ações para estabilidade
+  };
+}
+
 // Inicializar cliente WhatsApp
 const client = new Client({
-  authStrategy: new LocalAuth(),
-});
-
-process.on("SIGINT", async () => {
-  console.log("Fechando aplicação...");
-
-  try {
-    // Fechar browsers gerenciados pelo BrowserManager
-    await browserManager.closeAllBrowsers();
-
-    // Fechar o cliente WhatsApp se estiver ativo
-    if (client && client.pupBrowser && !client.pupBrowser.disconnected) {
-      console.log("Fechando browser do WhatsApp...");
-      await client.pupBrowser.close();
-    }
-  } catch (error) {
-    console.error("Erro durante cleanup:", error);
+  authStrategy: new LocalAuth({
+    dataPath: './session'
+  }),
+  puppeteer: obterConfigPuppeteer(),
+  webVersionCache: {
+    type: 'remote',
+    remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
   }
-
-  process.exit(0);
 });
 
-process.on("SIGTERM", async () => {
-  console.log("Fechando aplicação...");
-
-  try {
-    await browserManager.closeAllBrowsers();
-
-    if (client && client.pupBrowser && !client.pupBrowser.disconnected) {
-      await client.pupBrowser.close();
-    }
-  } catch (error) {
-    console.error("Erro durante cleanup:", error);
-  }
-
-  process.exit(0);
-});
 //Agendamento de reinicio automático
 function agendarReinicioPreventivo() {
   const horaReinicio = obterDataBrasilia();
@@ -339,7 +626,7 @@ agendarReinicioPreventivo();
 // Adicionar o ping periódico aos timers existentes
 setInterval(verificarConexaoAtiva, 10 * 60 * 1000); // Verificar a cada 10 minutos
 
-// Função para reinício suave
+// Função para reinício suave com ambiente configurado
 async function reinicioSuave() {
   console.log("Realizando reinício suave do bot...");
   registrarLogLocal(
@@ -350,50 +637,157 @@ async function reinicioSuave() {
   );
 
   try {
-    // 1. Salvar sessões de usuários e outros dados importantes
+    // 1. Salvar sessões de usuários
+    console.log("Salvando sessões de usuários...");
     for (const [chatId, sessao] of userSessions.entries()) {
-      await supabaseClient.salvarSessao(chatId, sessao);
+      await supabaseClient.salvarSessao(chatId, sessao).catch(err => 
+        console.log(`Erro ao salvar sessão ${chatId}:`, err.message)
+      );
     }
 
-    // 2. Fechar browsers gerenciados pelo BrowserManager
-    console.log("Fechando browsers gerenciados...");
-    await browserManager.closeAllBrowsers();
-
-    // 3. Fechar a sessão atual do WhatsApp
+    // 2. Fechar cliente WhatsApp graciosamente
+    console.log("Fechando cliente WhatsApp...");
     try {
-      if (client.pupBrowser && !client.pupBrowser.disconnected) {
-        console.log("Fechando browser do WhatsApp...");
-        await client.pupBrowser
-          .close()
-          .catch((err) => console.log("Erro ao fechar browser:", err.message));
+      if (client && typeof client.destroy === 'function') {
+        await Promise.race([
+          client.destroy(),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('Timeout ao fechar cliente')), 10000)
+          )
+        ]);
       }
     } catch (closeError) {
-      console.log("Erro ao tentar fechar browser:", closeError.message);
+      console.log("Erro ao fechar cliente:", closeError.message);
     }
 
-    // 4. Pequeno delay para garantir que tudo foi fechado
-    await new Promise((resolve) => setTimeout(resolve, 5000));
+    // 3. Limpar processos do browser e preparar ambiente VPS
+    console.log("Limpando processos do browser e preparando ambiente VPS...");
+    const { exec } = require('child_process');
+    
+    // Comandos específicos para VPS headless
+    const comandosLimpeza = [
+      'pkill -f "chromium" || true',
+      'pkill -f "chrome" || true',
+      'pkill -f "Xvfb" || true', // Limpar display virtual se existir
+      'rm -rf /tmp/chrome-* || true',
+      'rm -rf /tmp/.X* || true',
+      'rm -rf /tmp/.com.google.Chrome* || true',
+      'mkdir -p /tmp/chrome-user-data /tmp/chrome-data /tmp/chrome-cache || true',
+      'chmod -R 755 /tmp/chrome-* || true'
+    ];
 
-    // 5. Resetar contadores e variáveis de estado
+    for (const comando of comandosLimpeza) {
+      await new Promise((resolve) => {
+        exec(comando, (error) => {
+          // Ignorar erros de comandos de limpeza
+          resolve();
+        });
+      });
+    }
+
+    // 4. Aguardar limpeza completa
+    console.log("Aguardando limpeza de recursos...");
+    await new Promise((resolve) => setTimeout(resolve, 8000)); // Reduzido para VPS
+
+    // 5. Configurar ambiente para VPS headless
+    console.log("Configurando ambiente para VPS headless...");
+    delete process.env.DISPLAY; // Remover DISPLAY para VPS
+    process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
+    process.env.PUPPETEER_EXECUTABLE_PATH = '/usr/bin/chromium-browser';
+    process.env.HOME = process.env.HOME || '/root';
+    process.env.XDG_CONFIG_HOME = '/tmp/.config';
+    process.env.XDG_CACHE_HOME = '/tmp/.cache';
+    process.env.CHROME_DEVEL_SANDBOX = '/usr/lib/chromium-browser/chrome-sandbox';
+    
+    // 6. Forçar coleta de lixo
+    if (global.gc) {
+      console.log("Executando coleta de lixo...");
+      global.gc();
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      global.gc();
+    }
+
+    // 7. Resetar variáveis de estado
     mensagensRecebidas = 0;
     global.respostasEnviadas = 0;
     ultimaAtividadeTempo = Date.now();
 
-    // 6. Forçar coleta de lixo (se disponível)
-    if (global.gc) global.gc();
+    // 8. Criar script de reinício otimizado para VPS
+    const scriptReinicio = `#!/bin/bash
+# Script otimizado para VPS headless
 
-    // 7. Reiniciar cliente com instância nova
-    console.log("Reiniciando cliente WhatsApp...");
-    client.initialize();
+# Configurar ambiente
+export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+export PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
+export HOME=${process.env.HOME || '/root'}
+export XDG_CONFIG_HOME=/tmp/.config
+export XDG_CACHE_HOME=/tmp/.cache
+export CHROME_DEVEL_SANDBOX=/usr/lib/chromium-browser/chrome-sandbox
 
-    console.log("Reinício suave concluído com sucesso!");
+# Remover DISPLAY para VPS
+unset DISPLAY
+
+# Verificar se chromium existe
+if ! command -v chromium-browser &> /dev/null; then
+    echo "Chromium não encontrado, tentando instalar..."
+    apt-get update && apt-get install -y chromium-browser
+fi
+
+# Criar diretórios necessários
+mkdir -p /tmp/.config /tmp/.cache /tmp/chrome-user-data /tmp/chrome-data /tmp/chrome-cache
+chmod -R 755 /tmp/chrome-* /tmp/.config /tmp/.cache
+
+# Verificar recursos do sistema
+echo "Memória disponível:"
+free -h
+
+# Reiniciar com PM2
+pm2 restart bot --update-env --force
+`;
+
+    fs.writeFileSync('/tmp/restart_bot_vps.sh', scriptReinicio);
+    await new Promise((resolve) => {
+      exec('chmod +x /tmp/restart_bot_vps.sh', () => resolve());
+    });
+
+    // 9. Executar reinício otimizado para VPS
+    console.log("Executando reinício otimizado para VPS...");
     registrarLogLocal(
-      "Reinício suave concluído com sucesso",
+      "Executando reinício otimizado para VPS",
       "INFO",
       "reinicioSuave",
       null
     );
+
+    exec('/tmp/restart_bot_vps.sh', (error, stdout, stderr) => {
+      if (error) {
+        console.error('Erro no reinício VPS:', error.message);
+        registrarLogLocal(
+          `Erro no reinício VPS: ${error.message}`,
+          "ERROR",
+          "reinicioSuave",
+          null
+        );
+        
+        // Fallback: reinício simples
+        exec('pm2 restart bot --update-env --force', (fallbackError) => {
+          if (fallbackError) {
+            console.error('Erro no fallback:', fallbackError.message);
+          }
+        });
+      } else {
+        console.log('Reinício VPS executado com sucesso');
+        registrarLogLocal(
+          "Reinício VPS executado com sucesso",
+          "INFO",
+          "reinicioSuave",
+          null
+        );
+      }
+    });
+
     return true;
+
   } catch (error) {
     console.error("Erro durante reinício suave:", error);
     registrarLogLocal(
@@ -403,77 +797,54 @@ async function reinicioSuave() {
       null
     );
 
-    // Tentar reiniciar de forma mais agressiva em caso de falha
-    console.log("Tentando reinício forçado...");
+    // Fallback: forçar reinício via PM2
+    console.log("Executando reinício de emergência...");
+    const { exec } = require('child_process');
+    
+    exec('pm2 restart bot --force', (error, stdout, stderr) => {
+      if (error) {
+        console.error('Erro no reinício de emergência:', error.message);
+      } else {
+        console.log('Reinício de emergência executado');
+      }
+    });
 
-    try {
-      client.initialize();
-      return true;
-    } catch (fatalError) {
-      console.error("Erro fatal durante reinício forçado:", fatalError);
-      registrarLogLocal(
-        `Erro fatal durante reinício forçado: ${fatalError.message}`,
-        "ERROR",
-        "reinicioForçado",
-        null
-      );
-      return false;
-    }
+    return false;
   }
 }
 // Verificar estado da conexão regularmente
 async function verificarEstadoConexao() {
   try {
-    const estado = await client.getState();
-    console.log(`Estado atual do cliente: ${estado}`);
-
-    if (estado !== "CONNECTED") {
-      console.log("Cliente não está conectado, tentando reconectar...");
-      registrarLogLocal(
-        `Cliente em estado ${estado}, tentando reconectar`,
-        "WARN",
-        "verificarEstadoConexao",
-        null
-      );
-      client.initialize();
+    console.log("Verificando estado da conexão...");
+    
+    if (!client) {
+      console.log("Cliente não inicializado");
+      return false;
     }
 
-    if (client.pupBrowser) {
-      const pages = await client.pupBrowser.pages().catch(() => null);
-      if (!pages) {
-        console.log("Navegador não está respondendo, tentando reiniciar...");
-        registrarLogLocal(
-          "Navegador não está respondendo, tentando reiniciar",
-          "WARN",
-          "verificarEstadoConexao",
-          null
-        );
-        await reinicioSuave();
-      }
-    }
+    const info = await client.getState().catch(() => null);
+    console.log(`Estado atual: ${info || 'Desconhecido'}`);
+    
+    registrarLogLocal(
+      `Verificação de conexão - Estado: ${info || 'Desconhecido'}`,
+      "INFO",
+      "verificarEstadoConexao",
+      null
+    );
+
+    // Atualizar timestamp da última atividade
+    ultimaAtividadeTempo = Date.now();
+    
+    return info === 'CONNECTED';
   } catch (error) {
-    console.error("Erro ao verificar estado da conexão:", error);
+    console.error("Erro ao verificar estado da conexão:", error.message);
     registrarLogLocal(
       `Erro ao verificar estado da conexão: ${error.message}`,
       "ERROR",
       "verificarEstadoConexao",
       null
     );
-
-    if (error.message.includes("Execution context was destroyed")) {
-      console.log(
-        "Contexto destruído detectado em verificação de estado, reiniciando..."
-      );
-      registrarLogLocal(
-        "Contexto destruído detectado em verificação periódica",
-        "ERROR",
-        "verificarEstadoConexao",
-        null
-      );
-      setTimeout(() => {
-        client.initialize();
-      }, 5000);
-    }
+    return false;
   }
 }
 
@@ -557,25 +928,33 @@ client.on("authenticated", () => {
   console.log(mensagem);
   registrarLogLocal(mensagem, "INFO", "clientAuth", null);
 });
-
-client.on("ready", () => {
+client.on("ready", async () => {
   const mensagem = "Bot está pronto!";
   console.log(mensagem);
   registrarLogLocal(mensagem, "INFO", "clientReady", null);
 
-  setInterval(verificarTestesPendentes, 15 * 60 * 1000); // Verificar a cada 15 minutos
-  setInterval(monitorarSaudeBot, 60000); // Verificar a cada minuto
+  // Configurar timeouts e intervalos
+  setInterval(verificarTestesPendentes, 15 * 60 * 1000); // A cada 15 minutos
+  setInterval(monitorarSaudeBot, 60000); // A cada 1 minuto
   setInterval(verificarEstadoConexao, 15 * 60 * 1000); // A cada 15 minutos
   setInterval(salvarTodasSessoes, 5 * 60 * 1000); // A cada 5 minutos
+  setInterval(limparSessoesExpiradas, 60 * 60 * 1000); // A cada 1 hora
+  setInterval(monitorarMemoria, 2 * 60 * 1000); // A cada 2 minutos
+  setInterval(backupDadosCriticos, 6 * 60 * 60 * 1000); // A cada 6 horas
 
+  // Executar limpeza inicial
+  await limparSessoesExpiradas();
+  await backupDadosCriticos();
+
+  // Programar backup diário
   const agora = obterDataBrasilia();
   const proximaMeiaNoite = new Date(obterDataBrasilia());
   proximaMeiaNoite.setHours(24, 0, 0, 0);
   const tempoAteBackup = proximaMeiaNoite - agora;
 
   setTimeout(() => {
-    fazerBackupIndicacoes();
     setInterval(fazerBackupIndicacoes, 24 * 60 * 60 * 1000);
+    fazerBackupIndicacoes();
   }, tempoAteBackup);
 });
 
@@ -588,17 +967,31 @@ client.on("disconnected", async (reason) => {
     null
   );
 
-  setTimeout(() => {
-    console.log("Tentando reconectar...");
-    registrarLogLocal(
-      "Tentando reconectar após desconexão",
-      "INFO",
-      "clientEvent",
-      null
-    );
-    client.initialize();
-  }, 10000);
+  // Aguardar antes de tentar reconectar
+  console.log("Aguardando antes de tentar reconectar...");
+  await new Promise(resolve => setTimeout(resolve, 30000));
+
+  // Tentar reconexão via PM2
+  const { exec } = require('child_process');
+  exec('pm2 restart bot', (error, stdout, stderr) => {
+    if (error) {
+      console.error('Erro ao reiniciar via PM2:', error.message);
+    } else {
+      console.log('Reinício via PM2 solicitado após desconexão');
+    }
+  });
 });
+
+client.on('change_state', (state) => {
+  console.log('Estado do cliente mudou para:', state);
+  registrarLogLocal(
+    `Estado do cliente mudou para: ${state}`,
+    "INFO",
+    "clientStateChange",
+    null
+  );
+});
+
 
 // Processador de mensagens principal
 async function handleMessage(msg) {
@@ -1500,11 +1893,9 @@ async function processarMenuPrincipal(msg, session) {
   } else {
     session.invalidCount = (session.invalidCount || 0) + 1;
     await salvarSessao(msg.from, session);
-
+    
     // Log da mensagem inválida para monitoramento
-    console.log(
-      `Mensagem inválida de ${msg.from} (invalidCount: ${session.invalidCount})`
-    );
+    console.log(`Mensagem inválida de ${msg.from} (invalidCount: ${session.invalidCount})`);
     registrarLogLocal(
       `Mensagem inválida no menu principal: "${msg.body}"`,
       "INFO",
@@ -1840,7 +2231,7 @@ client.on("message", async (msg) => {
   const statusContato = contatoSalvo ? "YES" : "NO";
   const session = userSessions.get(chatId) || { step: "sem_sessao" };
   const etapaAtual = session.step;
-
+  
   // Verificar se o usuário está no mapa antes de chamar a função
   if (testesPendentes && testesPendentes.has(chatId)) {
     // Só marca como respondido se realmente estiver no mapa
@@ -1957,125 +2348,114 @@ process.on("unhandledRejection", (reason, promise) => {
 async function gerarPDFComLogs(logs, dias, nivel = null) {
   return new Promise((resolve, reject) => {
     try {
-      const PDFDocument = require("pdfkit");
-
+      const PDFDocument = require('pdfkit');
+      
       // Criar nome do arquivo baseado na data atual
-      const timestamp = obterDataBrasilia().toISOString().replace(/[:.]/g, "-");
+      const timestamp = obterDataBrasilia().toISOString().replace(/[:.]/g, '-');
       const filePath = `./logs/logs_${timestamp}.pdf`;
-
+      
       // Criar um novo documento PDF
       const doc = new PDFDocument({
         margin: 50,
-        size: "A4",
+        size: 'A4'
       });
-
+      
       // Pipe do PDF para o arquivo
       const stream = fs.createWriteStream(filePath);
       doc.pipe(stream);
-
+      
       // Adicionar título
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(18)
-        .text(`Relatório de Logs do Sistema IPTV Bot`, {
-          align: "center",
-        });
-
+      doc.font('Helvetica-Bold')
+         .fontSize(18)
+         .text(`Relatório de Logs do Sistema IPTV Bot`, {
+           align: 'center'
+         });
+      
       // Adicionar informações do relatório
-      doc
-        .moveDown()
-        .fontSize(12)
-        .text(
-          `Data de geração: ${obterDataBrasilia().toLocaleDateString(
-            "pt-BR"
-          )} ${obterDataBrasilia().toLocaleTimeString("pt-BR")}`
-        )
-        .text(`Período: Últimos ${dias} dias`)
-        .text(`Nível: ${nivel || "Todos"}`)
-        .text(`Total de registros: ${logs.length}`)
-        .moveDown();
-
+      doc.moveDown()
+         .fontSize(12)
+         .text(`Data de geração: ${obterDataBrasilia().toLocaleDateString('pt-BR')} ${obterDataBrasilia().toLocaleTimeString('pt-BR')}`)
+         .text(`Período: Últimos ${dias} dias`)
+         .text(`Nível: ${nivel || 'Todos'}`)
+         .text(`Total de registros: ${logs.length}`)
+         .moveDown();
+      
       // Linha divisória
-      doc
-        .moveTo(50, doc.y)
-        .lineTo(doc.page.width - 50, doc.y)
-        .stroke()
-        .moveDown();
-
+      doc.moveTo(50, doc.y)
+         .lineTo(doc.page.width - 50, doc.y)
+         .stroke()
+         .moveDown();
+      
       // Cabeçalhos da tabela
-      doc
-        .font("Helvetica-Bold")
-        .fontSize(10)
-        .text("Data/Hora", 50, doc.y, { width: 120 })
-        .text("Nível", 170, doc.y - 12, { width: 50 })
-        .text("Origem", 220, doc.y - 12, { width: 80 })
-        .text("Mensagem", 300, doc.y - 12)
-        .moveDown();
-
+      doc.font('Helvetica-Bold')
+         .fontSize(10)
+         .text('Data/Hora', 50, doc.y, { width: 120 })
+         .text('Nível', 170, doc.y - 12, { width: 50 })
+         .text('Origem', 220, doc.y - 12, { width: 80 })
+         .text('Mensagem', 300, doc.y - 12)
+         .moveDown();
+      
       // Linha divisória
-      doc
-        .moveTo(50, doc.y - 5)
-        .lineTo(doc.page.width - 50, doc.y - 5)
-        .stroke()
-        .moveDown();
-
+      doc.moveTo(50, doc.y - 5)
+         .lineTo(doc.page.width - 50, doc.y - 5)
+         .stroke()
+         .moveDown();
+      
       // Adicionar logs
-      doc.font("Helvetica");
-
-      logs.forEach((log) => {
+      doc.font('Helvetica');
+      
+      logs.forEach(log => {
         // Verificar se precisamos de uma nova página
         if (doc.y > doc.page.height - 100) {
           doc.addPage();
         }
-
+        
         // Formato de data
         const dataLog = new Date(log.data_hora);
-        const dataFormatada = `${dataLog.toLocaleDateString(
-          "pt-BR"
-        )} ${dataLog.toLocaleTimeString("pt-BR")}`;
-
+        const dataFormatada = `${dataLog.toLocaleDateString('pt-BR')} ${dataLog.toLocaleTimeString('pt-BR')}`;
+        
         // Definir cor baseada no nível
-        if (log.nivel === "ERROR") {
-          doc.fillColor("red");
-        } else if (log.nivel === "WARN") {
-          doc.fillColor("orange");
+        if (log.nivel === 'ERROR') {
+          doc.fillColor('red');
+        } else if (log.nivel === 'WARN') {
+          doc.fillColor('orange');
         } else {
-          doc.fillColor("black");
+          doc.fillColor('black');
         }
-
+        
         // Texto da mensagem pode ser longo, ajustar para quebrar linhas
         const textoY = doc.y;
-        doc
-          .text(dataFormatada, 50, textoY, { width: 120 })
-          .text(log.nivel, 170, textoY, { width: 50 })
-          .text(log.origem || "-", 220, textoY, { width: 80 });
-
+        doc.text(dataFormatada, 50, textoY, { width: 120 })
+           .text(log.nivel, 170, textoY, { width: 50 })
+           .text(log.origem || '-', 220, textoY, { width: 80 });
+        
         // Calcular a altura necessária para a mensagem
         const alturaAnterior = doc.y;
-        doc.text(log.mensagem, 300, textoY, {
+        doc.text(log.mensagem, 300, textoY, { 
           width: doc.page.width - 350,
-          align: "left",
+          align: 'left'
         });
-
+        
         // Ajustar espaço para a próxima linha
         const alturaFinal = Math.max(doc.y, alturaAnterior);
         doc.y = alturaFinal + 5;
-
+        
         // Resetar cor
-        doc.fillColor("black");
+        doc.fillColor('black');
       });
-
+      
       // Finalizar o documento
       doc.end();
-
+      
       // Retornar o caminho quando o arquivo estiver pronto
-      stream.on("finish", () => {
+      stream.on('finish', () => {
         resolve(filePath);
       });
-
-      stream.on("error", (err) => {
+      
+      stream.on('error', (err) => {
         reject(err);
       });
+      
     } catch (error) {
       reject(error);
     }
@@ -2087,4 +2467,9 @@ module.exports = {
   handleMessage,
   reinicioSuave,
   userSessions,
+  salvarTodasSessoes,
+  limparSessoesExpiradas,
+  backupDadosCriticos,
+  monitorarMemoria,
+  verificarEstadoConexao
 };
