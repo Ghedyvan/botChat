@@ -4,11 +4,19 @@ const fs = require("fs");
 const path = require("path");
 const cron = require("node-cron");
 
+const browserManager = require("./browserManager");
+
+async function getBrowserInstance() {
+  return await browserManager.getBrowser("scrapper");
+}
+
 async function obterJogosParaWhatsApp() {
   const url =
     "https://trivela.com.br/onde-assistir/futebol-ao-vivo-os-jogos-de-hoje-na-tv/";
   const cacheFilePath = path.join(__dirname, "jogos_hoje.json");
   const dataHoje = moment().tz("America/Sao_Paulo").format("DD/MM/YYYY");
+
+  console.log(`Buscando jogos para ${dataHoje}`);
 
   // Verifica se o cache existe e está atualizado
   if (fs.existsSync(cacheFilePath)) {
@@ -16,29 +24,38 @@ async function obterJogosParaWhatsApp() {
       const cacheContent = fs.readFileSync(cacheFilePath, "utf-8");
       if (cacheContent.trim()) {
         const cacheData = JSON.parse(cacheContent);
-  
-        // Verifica se a data do cache é a mesma de hoje
-        if (cacheData.data === dataHoje && Array.isArray(cacheData.jogos)) {
-          console.log("Usando dados do cache.");
-        
+
+        // **CORREÇÃO**: Agora só usa o cache se ele for de hoje E se tiver jogos.
+        if (
+          cacheData.data === dataHoje &&
+          Array.isArray(cacheData.jogos) &&
+          cacheData.jogos.length > 0
+        ) {
+          console.log("Usando dados do cache, pois é válido e contém jogos.");
+
           // Filtra os jogos do cache com base no horário atual
           const agora = moment().tz("America/Sao_Paulo");
           const fimDoDia = moment().tz("America/Sao_Paulo").endOf("day");
           console.log("Horário atual:", agora.format("HH:mm"));
-          console.log("Data de hoje:", dataHoje);
-        
+          console.log(`Total de jogos no cache: ${cacheData.jogos.length}`);
+
           const jogosFiltrados = cacheData.jogos.filter((jogo) => {
-            const horarioJogo = moment(jogo.horario, "HH:mm").tz("America/Sao_Paulo");
-            return (
-              horarioJogo.isAfter(agora.clone().subtract(2, "hours")) && // Inclui jogos que começaram há no máximo 2 horas
-              horarioJogo.isBefore(fimDoDia) // Inclui jogos que ainda vão acontecer até o fim do dia
+            const horarioJogo = moment(jogo.horario, "HH:mm").tz(
+              "America/Sao_Paulo"
             );
+            const incluir =
+              horarioJogo.isAfter(agora.clone().subtract(2, "hours")) &&
+              horarioJogo.isBefore(fimDoDia);
+
+            return incluir;
           });
-        
+
+          console.log(`Jogos filtrados: ${jogosFiltrados.length}`);
+
           if (jogosFiltrados.length === 0) {
             return "⚠️ Nenhum jogo começou há no máximo 2 horas ou está programado para hoje.";
           }
-        
+
           // Formata a resposta com os jogos filtrados
           let resposta = `⚽ *Jogos de hoje (${dataHoje})*\n\n`;
           jogosFiltrados.forEach((jogo) => {
@@ -46,42 +63,49 @@ async function obterJogosParaWhatsApp() {
             resposta += `⏰ ${jogo.horario} - 🏆 ${jogo.campeonato}\n`;
             resposta += `📺 ${jogo.transmissao}\n\n`;
           });
-        
+
           return resposta.trim();
         } else {
-          console.error("Cache inválido ou corrompido. Recriando o arquivo...");
+          console.log(
+            "Cache inválido, de data diferente ou vazio. Fazendo novo scraping..."
+          );
         }
       }
     } catch (error) {
-      console.error("Erro ao ler o cache. Recriando o arquivo...", error);
+      console.error("Erro ao ler o cache:", error);
     }
+  } else {
+    console.log("Cache não existe. Fazendo novo scraping...");
   }
 
-  // Se o cache não existir ou estiver desatualizado, recria o cache
-  // const browser = await puppeteer.launch({ headless: true });
-
-  const browser = await puppeteer.launch({
-    headless: true,
-    executablePath: "/usr/bin/chromium-browser", // Caminho do executável do Chromium
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--single-process",
-      "--no-zygote",
-      "--disable-gpu",
-      "--disable-dev-shm-usage",
-      "--max-old-space-size=256",
-    ],
-  });
-  const page = await browser.newPage();
+  // Se chegou aqui, precisa fazer scraping
+  let browser = null;
+  let page = null;
 
   try {
-    await page.goto(url, { waitUntil: "domcontentloaded" });
+    console.log("Iniciando scraping...");
+    browser = await getBrowserInstance();
+    page = await browser.newPage();
+
+    // Configurar timeout e User-Agent específicos para scraping
+    await page.setUserAgent(
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    );
+
+    console.log(`Navegando para: ${url}`);
+    await page.goto(url, {
+      waitUntil: "domcontentloaded",
+      timeout: 30000,
+    });
+
+    console.log("Página carregada, extraindo dados...");
 
     const jogos = await page.evaluate(() => {
-      const tabela = document.querySelector(
+      let tabela = document.querySelector(
         "figure:nth-of-type(1) table.large-only"
       );
+      if (!tabela) tabela = document.querySelector("table.large-only");
+      if (!tabela) tabela = document.querySelector("table");
       if (!tabela) return [];
 
       const linhas = tabela.querySelectorAll("tbody tr");
@@ -90,28 +114,26 @@ async function obterJogosParaWhatsApp() {
       linhas.forEach((linha) => {
         const colunas = linha.querySelectorAll("td");
         if (colunas.length >= 4) {
-          dados.push({
+          const jogo = {
             horario: colunas[0].innerText.trim(),
             campeonato: colunas[1].innerText.trim(),
             jogo: colunas[2].innerText.trim(),
             transmissao: colunas[3].innerText.trim(),
-          });
+          };
+          dados.push(jogo);
         }
       });
-
       return dados;
     });
 
-    await browser.close();
+    await page.close();
+    console.log(`Scraping concluído. ${jogos.length} jogos encontrados.`);
 
     if (!jogos || jogos.length === 0) {
       return "⚠️ Nenhum jogo encontrado no momento.";
     }
 
-    // Filtra os jogos que começaram há no máximo 2 horas ou que ainda vão acontecer até 23:59
     const agora = moment().tz("America/Sao_Paulo");
-    console.log("Horário atual:", agora.format("HH:mm"));
-    console.log("Data de hoje:", dataHoje);
     const fimDoDia = moment().tz("America/Sao_Paulo").endOf("day");
     const jogosFiltrados = jogos.filter((jogo) => {
       const horarioJogo = moment(jogo.horario, "HH:mm").tz("America/Sao_Paulo");
@@ -121,12 +143,18 @@ async function obterJogosParaWhatsApp() {
       );
     });
 
+    console.log(`Jogos após filtro: ${jogosFiltrados.length}`);
+
     if (jogosFiltrados.length === 0) {
+      fs.writeFileSync(
+        cacheFilePath,
+        JSON.stringify({ data: dataHoje, jogos }, null, 2),
+        "utf-8"
+      );
       return "⚠️ Nenhum jogo começou há no máximo 2 horas ou está programado para hoje.";
     }
 
     let resposta = `⚽ *Jogos de hoje (${dataHoje})*\n\n`;
-
     jogosFiltrados.forEach((jogo) => {
       resposta += `*${jogo.jogo}*\n`;
       resposta += `⏰ ${jogo.horario} - 🏆 ${jogo.campeonato}\n`;
@@ -135,7 +163,6 @@ async function obterJogosParaWhatsApp() {
 
     resposta = resposta.trim();
 
-    // Salva os dados no arquivo de cache
     fs.writeFileSync(
       cacheFilePath,
       JSON.stringify({ data: dataHoje, jogos }, null, 2),
@@ -145,24 +172,41 @@ async function obterJogosParaWhatsApp() {
     console.log("Cache atualizado com sucesso.");
     return resposta;
   } catch (error) {
-    await browser.close();
-    console.error("Erro ao obter jogos:", error);
+    console.error("Erro durante o scraping:", error);
+    if (page)
+      await page
+        .close()
+        .catch((e) => console.error("Erro ao fechar página:", e));
     return "⚠️ Ocorreu um erro ao buscar os jogos. Tente novamente mais tarde.";
   }
 }
 
-// Agendamento para executar a função todos os dias às 7h20 da manhã no timezone de São Paulo
 cron.schedule(
   "20 7 * * *",
   async () => {
-    console.log(
-      "Executando scraping para atualizar o cache às 7h20 no timezone de São Paulo..."
-    );
-    await obterJogosParaWhatsApp();
+    console.log("Executando scraping agendado às 7h20...");
+    try {
+      await obterJogosParaWhatsApp();
+    } catch (error) {
+      console.error("Erro no scraping agendado:", error);
+    }
   },
   {
-    timezone: "America/Sao_Paulo", // Define o timezone explicitamente
+    timezone: "America/Sao_Paulo",
   }
 );
 
 module.exports = { obterJogosParaWhatsApp };
+
+// --- PARA TESTE IMEDIATO ---
+// Este bloco executa a função uma vez para teste direto no terminal.
+// Para usar o bot em produção, comente (/* ... */) ou apague este bloco.
+// (async () => {
+//   console.log("Iniciando teste manual do script de scraping...");
+//   const resultado = await obterJogosParaWhatsApp();
+//   console.log("\n--- RESULTADO DO TESTE ---\n");
+//   console.log(resultado);
+//   console.log("\n--- FIM DO TESTE ---");
+//   // O cron e o browser podem manter o processo aberto, então forçamos o encerramento.
+//   process.exit(0);
+// })();

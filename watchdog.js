@@ -155,4 +155,5 @@ console.log(`[Monitor] Limite de inatividade: ${MAX_TEMPO_SEM_LOG/60000} minutos
 
 // Iniciar monitoramento
 setInterval(verificarSaudeBot, INTERVALO_VERIFICACAO);
-verificarSaudeBot(); // Verificar imediatamente
+verificarSaudeBot();
+
