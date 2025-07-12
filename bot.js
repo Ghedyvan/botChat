@@ -37,18 +37,54 @@ let monitoramentoAtivo = true;
 const userSessions = new Map();
 global.respostasEnviadas = 0;
 
+// Função para detectar o navegador disponível
+function detectarNavegador() {
+  const fs = require('fs');
+  const possiveisCaminhos = [
+    '/usr/bin/chromium-browser',
+    '/usr/bin/chromium',
+    '/usr/bin/google-chrome',
+    '/usr/bin/google-chrome-stable',
+    '/snap/bin/chromium',
+    '/usr/local/bin/chromium',
+    '/opt/google/chrome/chrome'
+  ];
+  
+  for (const caminho of possiveisCaminhos) {
+    try {
+      if (fs.existsSync(caminho)) {
+        console.log(`Navegador encontrado: ${caminho}`);
+        return caminho;
+      }
+    } catch (error) {
+      // Continua tentando
+    }
+  }
+  
+  console.log('Nenhum navegador encontrado nos caminhos padrão, usando bundled');
+  return null; // Usar o bundled do Puppeteer
+}
+
 // Função para obter configurações do Puppeteer otimizadas para VPS headless
 function obterConfigPuppeteer() {
+  // Detectar navegador disponível
+  const navegadorPath = detectarNavegador();
+  
   // Configurar variáveis de ambiente para VPS sem interface gráfica
-  process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
-  process.env.PUPPETEER_EXECUTABLE_PATH = '/usr/bin/chromium-browser';
+  if (navegadorPath) {
+    process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD = 'true';
+    process.env.PUPPETEER_EXECUTABLE_PATH = navegadorPath;
+  } else {
+    // Usar o bundled, não pular download
+    delete process.env.PUPPETEER_SKIP_CHROMIUM_DOWNLOAD;
+    delete process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
   
   // Configurações específicas para ambiente headless
   delete process.env.DISPLAY; // Remove DISPLAY em ambiente headless
   
-  return {
+  const config = {
     headless: true, // Usar modo headless tradicional (mais estável)
-    executablePath: "/usr/bin/chromium-browser",
     args: [
       // Argumentos essenciais para VPS
       "--no-sandbox",
@@ -130,19 +166,96 @@ function obterConfigPuppeteer() {
     slowMo: 100, // Delay maior entre ações para estabilidade
     devtools: false,
   };
+  
+  // Adicionar executablePath apenas se navegador foi detectado
+  if (navegadorPath) {
+    config.executablePath = navegadorPath;
+  }
+  
+  return config;
 }
 
-// Inicializar cliente WhatsApp
-const client = new Client({
-  authStrategy: new LocalAuth({
-    dataPath: './session'
-  }),
-  puppeteer: obterConfigPuppeteer(),
-  webVersionCache: {
-    type: 'remote',
-    remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
+// Inicializar cliente WhatsApp com fallback
+async function inicializarClienteComFallback() {
+  const tentativas = [
+    // Tentativa 1: Configuração otimizada atual
+    () => {
+      console.log("Tentativa 1: Configuração otimizada com navegador detectado");
+      return new Client({
+        authStrategy: new LocalAuth({
+          dataPath: './session'
+        }),
+        puppeteer: obterConfigPuppeteer(),
+        webVersionCache: {
+          type: 'remote',
+          remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html',
+        }
+      });
+    },
+    
+    // Tentativa 2: Configuração mínima com navegador bundled
+    () => {
+      console.log("Tentativa 2: Configuração mínima com navegador bundled");
+      return new Client({
+        authStrategy: new LocalAuth({
+          dataPath: './session'
+        }),
+        puppeteer: {
+          headless: true,
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+            '--single-process',
+            '--no-zygote'
+          ]
+        }
+      });
+    },
+    
+    // Tentativa 3: Configuração ultra-mínima
+    () => {
+      console.log("Tentativa 3: Configuração ultra-mínima");
+      return new Client({
+        authStrategy: new LocalAuth({
+          dataPath: './session'
+        }),
+        puppeteer: {
+          headless: true,
+          args: ['--no-sandbox', '--disable-setuid-sandbox']
+        }
+      });
+    }
+  ];
+  
+  for (let i = 0; i < tentativas.length; i++) {
+    try {
+      console.log(`Tentando inicializar cliente (tentativa ${i + 1}/${tentativas.length})...`);
+      const clienteTeste = tentativas[i]();
+      
+      // Timeout para inicialização
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout na inicialização')), 60000)
+      );
+      
+      await Promise.race([
+        clienteTeste.initialize(),
+        timeoutPromise
+      ]);
+      
+      console.log(`✓ Cliente inicializado com sucesso na tentativa ${i + 1}`);
+      return clienteTeste;
+    } catch (error) {
+      console.error(`✗ Tentativa ${i + 1} falhou:`, error.message);
+      if (i === tentativas.length - 1) {
+        throw new Error(`Todas as tentativas de inicialização falharam. Último erro: ${error.message}`);
+      }
+    }
   }
-});
+}
+
+let client;
 
 // Tratamento global de erros
 process.on('unhandledRejection', (reason, promise) => {
@@ -287,55 +400,59 @@ async function processarMensagem(msg) {
   }
 }
 
-// Eventos do cliente
-client.on("qr", (qr) => {
-  console.log("QR Code gerado:");
-  qrcode.generate(qr, { small: true });
-});
-
-client.on("authenticated", () => {
-  console.log("Autenticado com sucesso!");
-  registrarLogLocal("Bot autenticado", "INFO", "clientAuth", null);
-});
-
-client.on("ready", async () => {
-  console.log("Bot está pronto!");
-  registrarLogLocal("Bot está pronto", "INFO", "clientReady", null);
-  
-  // Inicializar dados
-  await inicializarDados();
-  
-  // Configurar intervalos
-  setInterval(salvarTodasSessoes, 5 * 60 * 1000); // A cada 5 minutos
-});
-
-client.on("message", processarMensagem);
-
-client.on("disconnected", (reason) => {
-  console.log("Cliente desconectado:", reason);
-  registrarLogLocal(`Cliente desconectado: ${reason}`, "WARN", "clientEvent", null);
-  
-  // Tentar reconectar após 30 segundos
-  setTimeout(() => {
-    const { exec } = require('child_process');
-    exec('pm2 restart bot', () => {});
-  }, 30000);
-});
-
-client.on('auth_failure', (message) => {
-  console.error('Falha na autenticação:', message);
-  registrarLogLocal(`Falha na autenticação: ${message}`, "ERROR", "authFailure", null);
-});
-
-// Inicializar o cliente
+// Inicializar o cliente com fallback
 console.log("Inicializando cliente WhatsApp...");
-client.initialize().catch(error => {
-  console.error("Erro ao inicializar cliente:", error);
-  registrarLogLocal(`Erro ao inicializar cliente: ${error.message}`, "ERROR", "initialization", null);
-  process.exit(1);
-});
+inicializarClienteComFallback()
+  .then(clienteInicializado => {
+    client = clienteInicializado;
+    
+    // Configurar eventos do cliente
+    client.on("qr", (qr) => {
+      console.log("QR Code gerado:");
+      qrcode.generate(qr, { small: true });
+    });
 
-console.log("Bot inicializado com sucesso!");
+    client.on("authenticated", () => {
+      console.log("Autenticado com sucesso!");
+      registrarLogLocal("Bot autenticado", "INFO", "clientAuth", null);
+    });
+
+    client.on("ready", async () => {
+      console.log("Bot está pronto!");
+      registrarLogLocal("Bot está pronto", "INFO", "clientReady", null);
+      
+      // Inicializar dados
+      await inicializarDados();
+      
+      // Configurar intervalos
+      setInterval(salvarTodasSessoes, 5 * 60 * 1000); // A cada 5 minutos
+    });
+
+    client.on("message", processarMensagem);
+
+    client.on("disconnected", (reason) => {
+      console.log("Cliente desconectado:", reason);
+      registrarLogLocal(`Cliente desconectado: ${reason}`, "WARN", "clientEvent", null);
+      
+      // Tentar reconectar após 30 segundos
+      setTimeout(() => {
+        const { exec } = require('child_process');
+        exec('pm2 restart bot', () => {});
+      }, 30000);
+    });
+
+    client.on('auth_failure', (message) => {
+      console.error('Falha na autenticação:', message);
+      registrarLogLocal(`Falha na autenticação: ${message}`, "ERROR", "authFailure", null);
+    });
+    
+    console.log("Bot inicializado com sucesso!");
+  })
+  .catch(error => {
+    console.error("Erro ao inicializar cliente:", error);
+    registrarLogLocal(`Erro ao inicializar cliente: ${error.message}`, "ERROR", "initialization", null);
+    process.exit(1);
+  });
 
 // Exportações para evitar dependência circular
 module.exports = {
